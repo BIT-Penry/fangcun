@@ -22,6 +22,18 @@ pub fn sql_plugin() -> tauri_plugin_sql::Builder {
                 sql: include_str!("../migrations/0003_bookmark_metadata.sql"),
                 kind: MigrationKind::Up,
             },
+            Migration {
+                version: 4,
+                description: "create prompt tables",
+                sql: include_str!("../migrations/0004_prompts.sql"),
+                kind: MigrationKind::Up,
+            },
+            Migration {
+                version: 5,
+                description: "create journal tables",
+                sql: include_str!("../migrations/0005_journal.sql"),
+                kind: MigrationKind::Up,
+            },
         ],
     )
 }

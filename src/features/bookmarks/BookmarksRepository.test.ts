@@ -81,4 +81,46 @@ describe("BookmarksRepository", () => {
       tags: [],
     })).rejects.toBeInstanceOf(DuplicateBookmarkError);
   });
+
+  it("imports bookmarks while preserving nested folders", async () => {
+    const select = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const execute = vi.fn().mockResolvedValue({ rowsAffected: 1 });
+    const ids = ["folder-research", "folder-papers", "bookmark-1"];
+    const repository = new BookmarksRepository(
+      { select, execute } as unknown as DatabasePort,
+      () => ids.shift() ?? "extra-id",
+      () => "2026-08-21T00:00:00.000Z",
+    );
+
+    await expect(repository.importBookmarks([{
+      url: "https://example.com/paper",
+      normalizedUrl: "https://example.com/paper",
+      title: "论文主页",
+      folderPath: ["研究", "论文"],
+    }], "skip")).resolves.toEqual({ importedCount: 1, updatedCount: 0, skippedCount: 0 });
+    expect(execute).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO bookmarks"), [
+      "bookmark-1", "https://example.com/paper", "https://example.com/paper", "论文主页",
+      "folder-papers", "2026-08-21T00:00:00.000Z",
+    ]);
+  });
+
+  it("does not create folders for skipped duplicate imports", async () => {
+    const select = vi.fn().mockResolvedValueOnce([{
+      id: "bookmark-existing", title: "Existing", folder_id: null,
+      updated_at: "2026-08-20T00:00:00.000Z",
+    }]);
+    const execute = vi.fn().mockResolvedValue({ rowsAffected: 1 });
+    const repository = new BookmarksRepository({ select, execute } as unknown as DatabasePort);
+
+    await expect(repository.importBookmarks([{
+      url: "https://example.com",
+      normalizedUrl: "https://example.com/",
+      title: "Imported",
+      folderPath: ["不应创建"],
+    }], "skip")).resolves.toEqual({ importedCount: 0, updatedCount: 0, skippedCount: 1 });
+    expect(execute).not.toHaveBeenCalled();
+  });
 });

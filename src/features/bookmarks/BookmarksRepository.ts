@@ -1,6 +1,10 @@
 import type { DatabasePort } from "../../shared/db/types";
-import type { Bookmark, BookmarkFolder, BookmarkInput, BookmarksStore } from "./types";
+import type {
+  Bookmark, BookmarkFolder, BookmarkImportResult, BookmarkImportStrategy,
+  BookmarkInput, BookmarksStore, ImportedBookmark,
+} from "./types";
 import { bookmarkHostname, normalizeBookmarkUrl } from "./url";
+import { likePattern } from "../../shared/db/search";
 
 interface BookmarkRow {
   id: string;
@@ -24,6 +28,10 @@ interface FolderRow {
   id: string;
   name: string;
   parent_id: string | null;
+}
+
+interface BookmarkSearchRow extends BookmarkRow {
+  tag_names: string | null;
 }
 
 export class DuplicateBookmarkError extends Error {
@@ -98,6 +106,39 @@ export class BookmarksRepository implements BookmarksStore {
     return rows.map((row) => ({ id: row.id, name: row.name, parentId: row.parent_id }));
   }
 
+  async searchBookmarks(query: string, limit = 5): Promise<Bookmark[]> {
+    const pattern = likePattern(query.trim());
+    const rows = await this.db.select<BookmarkSearchRow>(
+      `SELECT b.id, b.url, b.normalized_url, b.title, b.description, b.favicon_url,
+              b.folder_id, f.name AS folder_name, b.created_at, b.updated_at,
+              GROUP_CONCAT(t.name, CHAR(31)) AS tag_names
+       FROM bookmarks b
+       LEFT JOIN bookmark_folders f ON f.id = b.folder_id
+       LEFT JOIN bookmark_tag_links l ON l.bookmark_id = b.id
+       LEFT JOIN bookmark_tags t ON t.id = l.tag_id
+       WHERE b.title LIKE $1 ESCAPE '\\' OR b.description LIKE $1 ESCAPE '\\'
+          OR b.url LIKE $1 ESCAPE '\\' OR f.name LIKE $1 ESCAPE '\\'
+          OR t.name LIKE $1 ESCAPE '\\'
+       GROUP BY b.id
+       ORDER BY b.updated_at DESC
+       LIMIT $2`,
+      [pattern, limit],
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      url: row.url,
+      normalizedUrl: row.normalized_url,
+      title: row.title,
+      description: row.description,
+      faviconUrl: row.favicon_url,
+      folderId: row.folder_id,
+      folderName: row.folder_name,
+      tags: row.tag_names?.split(String.fromCharCode(31)).filter(Boolean) ?? [],
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+
   async createBookmark(input: BookmarkInput): Promise<void> {
     const normalizedUrl = normalizeBookmarkUrl(input.url);
     const timestamp = this.now();
@@ -159,6 +200,75 @@ export class BookmarksRepository implements BookmarksStore {
     await this.db.execute("DELETE FROM bookmarks WHERE id = $1", [id]);
   }
 
+  async importBookmarks(bookmarks: ImportedBookmark[], strategy: BookmarkImportStrategy): Promise<BookmarkImportResult> {
+    const result: BookmarkImportResult = { importedCount: 0, updatedCount: 0, skippedCount: 0 };
+    const timestamp = this.now();
+    const createdBookmarkIds: string[] = [];
+    const createdFolderIds: string[] = [];
+    const updatedBookmarks: {
+      id: string; title: string; folderId: string | null; updatedAt: string;
+    }[] = [];
+    try {
+      for (const bookmark of bookmarks) {
+        const [existing] = await this.db.select<{
+          id: string; title: string; folder_id: string | null; updated_at: string;
+        }>(
+          "SELECT id, title, folder_id, updated_at FROM bookmarks WHERE normalized_url = $1 LIMIT 1",
+          [bookmark.normalizedUrl],
+        );
+        if (existing) {
+          if (strategy === "skip") {
+            result.skippedCount += 1;
+            continue;
+          }
+          const folderId = await this.ensureFolderPath(bookmark.folderPath, timestamp, createdFolderIds);
+          updatedBookmarks.push({
+            id: existing.id,
+            title: existing.title,
+            folderId: existing.folder_id,
+            updatedAt: existing.updated_at,
+          });
+          await this.db.execute(
+            `UPDATE bookmarks
+             SET title = CASE WHEN TRIM(title) = '' THEN $1 ELSE title END,
+                 folder_id = COALESCE(folder_id, $2), updated_at = $3
+             WHERE id = $4`,
+            [bookmark.title, folderId, timestamp, existing.id],
+          );
+          result.updatedCount += 1;
+          continue;
+        }
+        const folderId = await this.ensureFolderPath(bookmark.folderPath, timestamp, createdFolderIds);
+        const id = this.createId();
+        await this.db.execute(
+          `INSERT INTO bookmarks(
+             id, url, normalized_url, title, description, favicon_url, folder_id, created_at, updated_at
+           ) VALUES ($1, $2, $3, $4, '', NULL, $5, $6, $6)`,
+          [id, bookmark.url, bookmark.normalizedUrl, bookmark.title, folderId, timestamp],
+        );
+        createdBookmarkIds.push(id);
+        result.importedCount += 1;
+      }
+      return result;
+    } catch (error) {
+      for (const bookmark of updatedBookmarks.reverse()) {
+        try {
+          await this.db.execute(
+            "UPDATE bookmarks SET title = $1, folder_id = $2, updated_at = $3 WHERE id = $4",
+            [bookmark.title, bookmark.folderId, bookmark.updatedAt, bookmark.id],
+          );
+        } catch { /* best-effort rollback */ }
+      }
+      for (const id of createdBookmarkIds.reverse()) {
+        try { await this.db.execute("DELETE FROM bookmarks WHERE id = $1", [id]); } catch { /* best-effort rollback */ }
+      }
+      for (const id of createdFolderIds.reverse()) {
+        try { await this.db.execute("DELETE FROM bookmark_folders WHERE id = $1", [id]); } catch { /* best-effort rollback */ }
+      }
+      throw error;
+    }
+  }
+
   private async ensureFolder(nameInput: string, timestamp: string): Promise<string | null> {
     const name = nameInput.trim();
     if (!name) return null;
@@ -176,6 +286,35 @@ export class BookmarksRepository implements BookmarksStore {
       [id, name, timestamp],
     );
     return id;
+  }
+
+  private async ensureFolderPath(path: string[], timestamp: string, createdIds: string[]): Promise<string | null> {
+    let parentId: string | null = null;
+    for (const input of path) {
+      const name = input.trim();
+      if (!name) continue;
+      const rows: { id: string }[] = await this.db.select<{ id: string }>(
+        `SELECT id FROM bookmark_folders
+         WHERE name = $1 COLLATE NOCASE
+           AND (($2 IS NULL AND parent_id IS NULL) OR parent_id = $2)
+         LIMIT 1`,
+        [name, parentId],
+      );
+      const existing: { id: string } | undefined = rows[0];
+      if (existing) {
+        parentId = existing.id;
+        continue;
+      }
+      const id = this.createId();
+      await this.db.execute(
+        `INSERT INTO bookmark_folders(id, parent_id, name, sort_order, created_at, updated_at)
+         VALUES ($1, $2, $3, 0, $4, $4)`,
+        [id, parentId, name, timestamp],
+      );
+      createdIds.push(id);
+      parentId = id;
+    }
+    return parentId;
   }
 
   private async replaceTags(bookmarkId: string, tags: string[], timestamp: string): Promise<void> {

@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ExternalLink, Folder, Pencil, Plus, Search, Tag, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ExternalLink, Folder, Grid2X2, List, Pencil, Plus, Search, Tag, Trash2, Upload, X } from "lucide-react";
 import { BookmarkEditor } from "./BookmarkEditor";
+import { parseBookmarkHtml } from "./import";
 import { useBookmarksStore } from "./BookmarksContext";
-import type { Bookmark, BookmarkFolder, BookmarkInput } from "./types";
+import type { Bookmark, BookmarkFolder, BookmarkImportPreview, BookmarkImportStrategy, BookmarkInput } from "./types";
 import { bookmarkHostname } from "./url";
+import { openExternalUrl } from "../../shared/openExternal";
 
 export function BookmarksPage() {
   const repository = useBookmarksStore();
@@ -15,6 +17,12 @@ export function BookmarksPage() {
   const [folderFilter, setFolderFilter] = useState("");
   const [tagFilter, setTagFilter] = useState("");
   const [editor, setEditor] = useState<Bookmark | "new" | null>(null);
+  const [view, setView] = useState<"list" | "grid">("list");
+  const [importPreview, setImportPreview] = useState<BookmarkImportPreview | null>(null);
+  const [importStrategy, setImportStrategy] = useState<BookmarkImportStrategy>("skip");
+  const [importing, setImporting] = useState(false);
+  const [importNotice, setImportNotice] = useState("");
+  const importInput = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -34,6 +42,11 @@ export function BookmarksPage() {
   }, [repository]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const openEditor = () => setEditor("new");
+    window.addEventListener("fangcun:quick-add", openEditor);
+    return () => window.removeEventListener("fangcun:quick-add", openEditor);
+  }, []);
 
   const tags = useMemo(
     () => [...new Set(bookmarks.flatMap((bookmark) => bookmark.tags))]
@@ -74,6 +87,35 @@ export function BookmarksPage() {
     }
   };
 
+  const chooseImportFile = async (file: File | undefined) => {
+    if (!file) return;
+    setLoadError("");
+    setImportNotice("");
+    try {
+      setImportPreview(parseBookmarkHtml(await file.text()));
+      setImportStrategy("skip");
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "无法解析 Bookmark HTML 文件");
+    } finally {
+      if (importInput.current) importInput.current.value = "";
+    }
+  };
+
+  const importBookmarks = async () => {
+    if (!importPreview) return;
+    setImporting(true);
+    try {
+      const result = await repository.importBookmarks(importPreview.bookmarks, importStrategy);
+      setImportNotice(`已导入 ${result.importedCount} 条，更新 ${result.updatedCount} 条，跳过 ${result.skippedCount} 条`);
+      setImportPreview(null);
+      await load();
+    } catch {
+      setLoadError("导入失败，未完整写入的内容已撤销，请重试");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const filtering = Boolean(search || folderFilter || tagFilter);
 
   return (
@@ -84,10 +126,16 @@ export function BookmarksPage() {
           <h1>书签</h1>
           <p className="page-description">把常用资料放在一个安静、可检索的空间里。</p>
         </div>
-        <button type="button" className="button-primary" onClick={() => setEditor("new")}>
-          <Plus aria-hidden="true" size={17} />
-          添加书签
-        </button>
+        <div className="bookmark-header-actions">
+          <input ref={importInput} className="sr-only" type="file" accept=".html,text/html"
+            aria-label="选择 Bookmark HTML 文件" onChange={(event) => void chooseImportFile(event.target.files?.[0])} />
+          <button type="button" className="button-secondary" onClick={() => importInput.current?.click()}>
+            <Upload aria-hidden="true" size={16} />导入 HTML
+          </button>
+          <button type="button" className="button-primary" onClick={() => setEditor("new")}>
+            <Plus aria-hidden="true" size={17} />添加书签
+          </button>
+        </div>
       </header>
 
       <div className="bookmark-toolbar">
@@ -113,6 +161,10 @@ export function BookmarksPage() {
             {tags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
           </select>
         </label>
+        <div className="view-toggle" aria-label="书签视图">
+          <button type="button" className={view === "list" ? "active" : ""} aria-label="列表视图" aria-pressed={view === "list"} onClick={() => setView("list")}><List aria-hidden="true" size={15} /></button>
+          <button type="button" className={view === "grid" ? "active" : ""} aria-label="卡片视图" aria-pressed={view === "grid"} onClick={() => setView("grid")}><Grid2X2 aria-hidden="true" size={15} /></button>
+        </div>
       </div>
 
       <div className="bookmark-result-meta">
@@ -130,6 +182,7 @@ export function BookmarksPage() {
           <button type="button" onClick={() => void load()}>重试</button>
         </div>
       )}
+      {importNotice && <div role="status" className="import-notice">{importNotice}</div>}
 
       {loading ? (
         <p className="bookmark-status">正在整理书签…</p>
@@ -141,7 +194,7 @@ export function BookmarksPage() {
           {!filtering && <button type="button" className="button-secondary" onClick={() => setEditor("new")}>添加第一条书签</button>}
         </div>
       ) : (
-        <div className="bookmark-list">
+        <div className={view === "grid" ? "bookmark-list grid-view" : "bookmark-list"}>
           {visibleBookmarks.map((bookmark) => (
             <article key={bookmark.id} className="bookmark-card">
               {bookmark.faviconUrl && (
@@ -158,7 +211,11 @@ export function BookmarksPage() {
                 </div>
               </div>
               <div className="bookmark-card-actions">
-                <a href={bookmark.url} target="_blank" rel="noreferrer" className="icon-button" aria-label={`打开 ${bookmark.title}`}>
+                <a href={bookmark.url} className="icon-button" aria-label={`打开 ${bookmark.title}`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void openExternalUrl(bookmark.url).catch(() => setLoadError("无法使用默认浏览器打开这个网址"));
+                  }}>
                   <ExternalLink aria-hidden="true" size={17} />
                 </a>
                 <button type="button" className="icon-button" onClick={() => setEditor(bookmark)} aria-label={`编辑 ${bookmark.title}`}>
@@ -179,6 +236,35 @@ export function BookmarksPage() {
           folders={folders}
           onClose={() => setEditor(null)}
           onSave={saveBookmark} />
+      )}
+
+      {importPreview && (
+        <div className="dialog-backdrop">
+          <section role="dialog" aria-modal="true" aria-labelledby="bookmark-import-title" className="bookmark-editor import-dialog">
+            <header className="bookmark-editor-header">
+              <div><p className="eyebrow">BOOKMARK IMPORT</p><h2 id="bookmark-import-title">确认导入</h2></div>
+              <button type="button" className="icon-button" onClick={() => setImportPreview(null)} disabled={importing} aria-label="关闭"><X aria-hidden="true" size={18} /></button>
+            </header>
+            <div className="import-preview">
+              <div className="import-stats">
+                <span><strong>{importPreview.bookmarks.length}</strong> 条有效书签</span>
+                <span><strong>{importPreview.folderPaths.length}</strong> 个文件夹</span>
+                <span><strong>{importPreview.duplicateInFileCount}</strong> 条文件内重复</span>
+                <span><strong>{importPreview.invalidCount}</strong> 条无效地址</span>
+              </div>
+              <fieldset>
+                <legend>遇到资料库中已有的网址</legend>
+                <label><input type="radio" name="import-strategy" checked={importStrategy === "skip"} onChange={() => setImportStrategy("skip")} />跳过重复项</label>
+                <label><input type="radio" name="import-strategy" checked={importStrategy === "fill"} onChange={() => setImportStrategy("fill")} />用导入内容补全缺失标题和文件夹</label>
+              </fieldset>
+              <p>导入只读取 HTML 中的链接与文件夹，不执行脚本，也不会加载其中的远程资源。</p>
+              <footer className="bookmark-editor-actions">
+                <button type="button" className="button-secondary" onClick={() => setImportPreview(null)} disabled={importing}>取消</button>
+                <button type="button" className="button-primary" onClick={() => void importBookmarks()} disabled={importing || importPreview.bookmarks.length === 0}>{importing ? "导入中…" : "开始导入"}</button>
+              </footer>
+            </div>
+          </section>
+        </div>
       )}
     </section>
   );

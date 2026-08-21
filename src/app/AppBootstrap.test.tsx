@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
@@ -11,7 +11,7 @@ describe("AppBootstrap", () => {
     render(<MemoryRouter><AppBootstrap loadDatabase={vi.fn().mockResolvedValue(db)} /></MemoryRouter>);
     expect(screen.getByText("正在打开方寸…")).toBeInTheDocument();
     expect(await screen.findByText("方寸")).toBeInTheDocument();
-    expect(document.documentElement.dataset.theme).toBe("dark");
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("dark"));
   });
 
   it("retries initialization and restores the persisted theme", async () => {
@@ -25,6 +25,6 @@ describe("AppBootstrap", () => {
     await user.click(screen.getByRole("button", { name: "重试" }));
     expect(loadDatabase).toHaveBeenCalledTimes(2);
     expect(await screen.findByText("方寸")).toBeInTheDocument();
-    expect(document.documentElement.dataset.theme).toBe("dark");
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("dark"));
   });
 });

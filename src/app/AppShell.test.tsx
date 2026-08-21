@@ -4,6 +4,10 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { BookmarksProvider } from "../features/bookmarks/BookmarksContext";
 import type { BookmarksStore } from "../features/bookmarks/types";
+import { JournalProvider } from "../features/journal/JournalContext";
+import type { JournalStore } from "../features/journal/types";
+import { PromptsProvider } from "../features/prompts/PromptsContext";
+import type { PromptsStore } from "../features/prompts/types";
 import { AppShell } from "./AppShell";
 
 const bookmarks: BookmarksStore = {
@@ -12,6 +16,29 @@ const bookmarks: BookmarksStore = {
   createBookmark: async () => undefined,
   updateBookmark: async () => undefined,
   deleteBookmark: async () => undefined,
+  importBookmarks: async () => ({ importedCount: 0, updatedCount: 0, skippedCount: 0 }),
+  searchBookmarks: async () => [],
+};
+
+const journal: JournalStore = {
+  getEntry: async () => "",
+  saveEntry: async () => undefined,
+  listTodos: async () => [],
+  createTodo: async () => "todo-1",
+  updateTodoContent: async () => undefined,
+  setTodoCompleted: async () => undefined,
+  moveTodo: async () => undefined,
+  reorderTodos: async () => undefined,
+  deleteTodo: async () => undefined,
+  searchJournal: async () => [],
+};
+
+const prompts: PromptsStore = {
+  listPrompts: async () => [],
+  createPrompt: async () => "prompt-1",
+  updatePrompt: async () => undefined,
+  deletePrompt: async () => undefined,
+  searchPrompts: async () => [],
 };
 
 describe("AppShell", () => {
@@ -19,7 +46,11 @@ describe("AppShell", () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={["/"]}>
-        <BookmarksProvider repository={bookmarks}><AppShell /></BookmarksProvider>
+        <BookmarksProvider repository={bookmarks}>
+          <PromptsProvider repository={prompts}>
+            <JournalProvider repository={journal}><AppShell /></JournalProvider>
+          </PromptsProvider>
+        </BookmarksProvider>
       </MemoryRouter>,
     );
 
@@ -32,5 +63,36 @@ describe("AppShell", () => {
 
     await user.click(within(navigation).getByRole("link", { name: "书签" }));
     expect(screen.getByRole("heading", { name: "书签" })).toBeInTheDocument();
+  });
+
+  it("opens global search with Command K", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <BookmarksProvider repository={bookmarks}>
+          <PromptsProvider repository={prompts}>
+            <JournalProvider repository={journal}><AppShell /></JournalProvider>
+          </PromptsProvider>
+        </BookmarksProvider>
+      </MemoryRouter>,
+    );
+    await user.keyboard("{Meta>}k{/Meta}");
+    expect(screen.getByRole("dialog", { name: "全局搜索" })).toBeInTheDocument();
+  });
+
+  it("focuses the current module quick add with Command N", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <BookmarksProvider repository={bookmarks}>
+          <PromptsProvider repository={prompts}>
+            <JournalProvider repository={journal}><AppShell /></JournalProvider>
+          </PromptsProvider>
+        </BookmarksProvider>
+      </MemoryRouter>,
+    );
+    const todoInput = await screen.findByLabelText("新增 Todo");
+    await user.keyboard("{Meta>}n{/Meta}");
+    expect(todoInput).toHaveFocus();
   });
 });

@@ -1,0 +1,3 @@
+export function likePattern(value: string): string {
+  return `%${value.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
+}
