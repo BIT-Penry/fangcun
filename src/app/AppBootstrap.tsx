@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { BookmarksProvider } from "../features/bookmarks/BookmarksContext";
+import { BookmarksRepository } from "../features/bookmarks/BookmarksRepository";
 import { initializeDatabase } from "../shared/db/database";
 import type { DatabasePort } from "../shared/db/types";
 import { SettingsRepository } from "../shared/settings/SettingsRepository";
@@ -8,7 +10,12 @@ import { ThemeProvider } from "./theme/ThemeProvider";
 
 type BootstrapState =
   | { status: "loading" }
-  | { status: "ready"; theme: ThemePreference; repository: SettingsRepository }
+  | {
+      status: "ready";
+      theme: ThemePreference;
+      settingsRepository: SettingsRepository;
+      bookmarksRepository: BookmarksRepository;
+    }
   | { status: "error" };
 
 export function AppBootstrap({ loadDatabase = initializeDatabase }: {
@@ -22,11 +29,11 @@ export function AppBootstrap({ loadDatabase = initializeDatabase }: {
     setState({ status: "loading" });
     loadDatabase()
       .then(async (db) => {
-        const repository = new SettingsRepository(db);
-        const theme = await repository.getThemePreference();
-        return { theme, repository };
+        const settingsRepository = new SettingsRepository(db);
+        const theme = await settingsRepository.getThemePreference();
+        return { theme, settingsRepository, bookmarksRepository: new BookmarksRepository(db) };
       })
-      .then(({ theme, repository }) => active && setState({ status: "ready", theme, repository }))
+      .then((ready) => active && setState({ status: "ready", ...ready }))
       .catch(() => active && setState({ status: "error" }));
     return () => { active = false; };
   }, [attempt, loadDatabase]);
@@ -38,9 +45,11 @@ export function AppBootstrap({ loadDatabase = initializeDatabase }: {
   return (
     <ThemeProvider
       initialPreference={state.theme}
-      onPreferenceChange={(value) => state.repository.setThemePreference(value)}
+      onPreferenceChange={(value) => state.settingsRepository.setThemePreference(value)}
     >
-      <AppShell />
+      <BookmarksProvider repository={state.bookmarksRepository}>
+        <AppShell />
+      </BookmarksProvider>
     </ThemeProvider>
   );
 }
