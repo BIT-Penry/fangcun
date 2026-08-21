@@ -144,6 +144,10 @@ export function BookmarksPage() {
         <div className="bookmark-list">
           {visibleBookmarks.map((bookmark) => (
             <article key={bookmark.id} className="bookmark-card">
+              {bookmark.faviconUrl && (
+                <img className="bookmark-favicon" src={bookmark.faviconUrl} alt=""
+                  onError={(event) => { event.currentTarget.style.display = "none"; }} />
+              )}
               <div className="bookmark-card-main">
                 <div className="bookmark-domain">{bookmarkHostname(bookmark.url)}</div>
                 <h2>{bookmark.title}</h2>

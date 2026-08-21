@@ -5,12 +5,17 @@ import { BookmarksProvider } from "./BookmarksContext";
 import { BookmarksPage } from "./BookmarksPage";
 import type { Bookmark, BookmarksStore } from "./types";
 
+vi.mock("./metadata", () => ({
+  fetchBookmarkMetadata: vi.fn().mockResolvedValue({ title: null, description: null, faviconUrl: null }),
+}));
+
 const savedBookmark: Bookmark = {
   id: "bookmark-1",
   url: "https://pytorch.org/docs",
   normalizedUrl: "https://pytorch.org/docs",
   title: "PyTorch 文档",
   description: "常用 API 参考",
+  faviconUrl: "https://pytorch.org/favicon.ico",
   folderId: "folder-1",
   folderName: "研究资料",
   tags: ["深度学习", "文档"],
@@ -64,6 +69,7 @@ describe("BookmarksPage", () => {
       url: "https://example.com/docs",
       title: "Example Docs",
       description: "",
+      faviconUrl: "",
       folderName: "文档",
       tags: ["API", "参考"],
     }));

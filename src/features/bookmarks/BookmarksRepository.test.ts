@@ -11,6 +11,7 @@ describe("BookmarksRepository", () => {
         normalized_url: "https://example.com/docs",
         title: "Example Docs",
         description: "Reference",
+        favicon_url: "https://example.com/icon.png",
         folder_id: "folder-1",
         folder_name: "文档",
         created_at: "2026-08-21T00:00:00.000Z",
@@ -25,6 +26,7 @@ describe("BookmarksRepository", () => {
     await expect(new BookmarksRepository(db).listBookmarks()).resolves.toEqual([expect.objectContaining({
       id: "bookmark-1",
       folderName: "文档",
+      faviconUrl: "https://example.com/icon.png",
       tags: ["API", "参考"],
     })]);
   });
@@ -46,6 +48,7 @@ describe("BookmarksRepository", () => {
       url: "HTTPS://Example.com:443#intro",
       title: "Example",
       description: " Reference ",
+      faviconUrl: "https://example.com/icon.png",
       folderName: "文档",
       tags: ["API", "api", ""],
     });
@@ -56,6 +59,7 @@ describe("BookmarksRepository", () => {
       "https://example.com/",
       "Example",
       "Reference",
+      "https://example.com/icon.png",
       "folder-1",
       "2026-08-21T00:00:00.000Z",
     ]);
@@ -72,6 +76,7 @@ describe("BookmarksRepository", () => {
       url: "https://example.com",
       title: "Example",
       description: "",
+      faviconUrl: "",
       folderName: "",
       tags: [],
     })).rejects.toBeInstanceOf(DuplicateBookmarkError);

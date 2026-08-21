@@ -8,6 +8,7 @@ interface BookmarkRow {
   normalized_url: string;
   title: string;
   description: string;
+  favicon_url: string | null;
   folder_id: string | null;
   folder_name: string | null;
   created_at: string;
@@ -55,7 +56,7 @@ export class BookmarksRepository implements BookmarksStore {
 
   async listBookmarks(): Promise<Bookmark[]> {
     const rows = await this.db.select<BookmarkRow>(
-      `SELECT b.id, b.url, b.normalized_url, b.title, b.description,
+      `SELECT b.id, b.url, b.normalized_url, b.title, b.description, b.favicon_url,
               b.folder_id, f.name AS folder_name, b.created_at, b.updated_at
        FROM bookmarks b
        LEFT JOIN bookmark_folders f ON f.id = b.folder_id
@@ -79,6 +80,7 @@ export class BookmarksRepository implements BookmarksStore {
       normalizedUrl: row.normalized_url,
       title: row.title,
       description: row.description,
+      faviconUrl: row.favicon_url,
       folderId: row.folder_id,
       folderName: row.folder_name,
       tags: tagsByBookmark.get(row.id) ?? [],
@@ -104,14 +106,15 @@ export class BookmarksRepository implements BookmarksStore {
       const bookmarkId = this.createId();
       await this.db.execute(
         `INSERT INTO bookmarks(
-           id, url, normalized_url, title, description, folder_id, created_at, updated_at
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $7)`,
+           id, url, normalized_url, title, description, favicon_url, folder_id, created_at, updated_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
         [
           bookmarkId,
           input.url.trim(),
           normalizedUrl,
           input.title.trim() || bookmarkHostname(input.url),
           input.description.trim(),
+          input.faviconUrl.trim() || null,
           folderId,
           timestamp,
         ],
@@ -131,13 +134,14 @@ export class BookmarksRepository implements BookmarksStore {
       const result = await this.db.execute(
         `UPDATE bookmarks
          SET url = $1, normalized_url = $2, title = $3, description = $4,
-             folder_id = $5, updated_at = $6
-         WHERE id = $7`,
+             favicon_url = $5, folder_id = $6, updated_at = $7
+         WHERE id = $8`,
         [
           input.url.trim(),
           normalizedUrl,
           input.title.trim() || bookmarkHostname(input.url),
           input.description.trim(),
+          input.faviconUrl.trim() || null,
           folderId,
           timestamp,
           id,

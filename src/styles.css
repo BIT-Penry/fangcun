@@ -97,7 +97,8 @@ button, input, textarea, select { font: inherit; }
 .bookmark-list { display: grid; gap: 10px; padding-bottom: 28px; }
 .bookmark-card { display: flex; align-items: flex-start; justify-content: space-between; gap: 22px; border: 1px solid var(--border); border-radius: 12px; padding: 18px 16px 16px 18px; background: var(--surface); transition: border-color 150ms ease, transform 150ms ease; }
 .bookmark-card:hover { border-color: color-mix(in srgb, var(--text) 32%, var(--border)); transform: translateY(-1px); }
-.bookmark-card-main { min-width: 0; }
+.bookmark-card-main { min-width: 0; flex: 1; }
+.bookmark-favicon { width: 28px; height: 28px; flex: none; border-radius: 7px; object-fit: contain; }
 .bookmark-domain { color: var(--accent); font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 10px; letter-spacing: 0.04em; }
 .bookmark-card h2 { margin: 5px 0 0; overflow: hidden; font-size: 16px; line-height: 1.35; letter-spacing: -0.01em; text-overflow: ellipsis; white-space: nowrap; }
 .bookmark-card-main > p { max-width: 720px; margin: 7px 0 0; color: color-mix(in srgb, var(--text) 62%, transparent); font-size: 13px; line-height: 1.55; }
@@ -125,6 +126,13 @@ button, input, textarea, select { font: inherit; }
 .bookmark-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .field-label { display: grid; gap: 7px; color: color-mix(in srgb, var(--text) 78%, transparent); font-size: 12px; font-weight: 600; }
 .field-label > span { margin-left: 4px; color: color-mix(in srgb, var(--text) 40%, transparent); font-weight: 400; }
+.field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.metadata-button { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; padding: 0; color: var(--accent); cursor: pointer; font-size: 11px; font-weight: 600; }
+.metadata-button:disabled { cursor: not-allowed; opacity: 0.5; }
+.field-label > .metadata-hint { margin: -1px 0 0; color: color-mix(in srgb, var(--text) 46%, transparent); font-size: 11px; }
+.field-label > .metadata-hint.warning { color: var(--accent); }
+.spinning { animation: spin 850ms linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 .field-label input,
 .field-label textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 8px; outline: 0; background: var(--surface); padding: 10px 11px; color: var(--text); font-size: 13px; font-weight: 400; line-height: 1.4; resize: vertical; }
 .field-label input:focus,

@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from "react";
-import { X } from "lucide-react";
+import { useRef, useState, type FormEvent } from "react";
+import { RefreshCw, X } from "lucide-react";
+import { fetchBookmarkMetadata, type BookmarkMetadata } from "./metadata";
 import type { Bookmark, BookmarkFolder, BookmarkInput } from "./types";
 import { normalizeBookmarkUrl } from "./url";
 
@@ -8,21 +9,64 @@ function initialInput(bookmark: Bookmark | null): BookmarkInput {
     url: bookmark?.url ?? "",
     title: bookmark?.title ?? "",
     description: bookmark?.description ?? "",
+    faviconUrl: bookmark?.faviconUrl ?? "",
     folderName: bookmark?.folderName ?? "",
     tags: bookmark?.tags ?? [],
   };
 }
 
-export function BookmarkEditor({ bookmark, folders, onClose, onSave }: {
+export function BookmarkEditor({
+  bookmark,
+  folders,
+  onClose,
+  onSave,
+  metadataLoader = fetchBookmarkMetadata,
+}: {
   bookmark: Bookmark | null;
   folders: BookmarkFolder[];
   onClose: () => void;
   onSave: (input: BookmarkInput) => Promise<void>;
+  metadataLoader?: (url: string) => Promise<BookmarkMetadata>;
 }) {
   const [input, setInput] = useState(() => initialInput(bookmark));
   const [tagsText, setTagsText] = useState(() => input.tags.join(", "));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [metadataStatus, setMetadataStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const lastFetchedUrl = useRef(bookmark?.normalizedUrl ?? "");
+
+  const loadMetadata = async (force = false) => {
+    let normalizedUrl: string;
+    try {
+      normalizedUrl = normalizeBookmarkUrl(input.url);
+    } catch {
+      if (force) setMetadataStatus("error");
+      return;
+    }
+    if (!force && normalizedUrl === lastFetchedUrl.current) return;
+
+    lastFetchedUrl.current = normalizedUrl;
+    setMetadataStatus("loading");
+    try {
+      const metadata = await metadataLoader(normalizedUrl);
+      setInput((current) => {
+        try {
+          if (normalizeBookmarkUrl(current.url) !== normalizedUrl) return current;
+        } catch {
+          return current;
+        }
+        return {
+          ...current,
+          title: current.title.trim() || metadata.title || "",
+          description: current.description.trim() || metadata.description || "",
+          faviconUrl: metadata.faviconUrl || "",
+        };
+      });
+      setMetadataStatus(metadata.title || metadata.description || metadata.faviconUrl ? "success" : "error");
+    } catch {
+      setMetadataStatus("error");
+    }
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -56,11 +100,24 @@ export function BookmarkEditor({ bookmark, folders, onClose, onSave }: {
         </header>
 
         <form onSubmit={(event) => void submit(event)} className="bookmark-form">
-          <label className="field-label">
-            网页地址
-            <input autoFocus required type="url" value={input.url} placeholder="https://example.com"
-              onChange={(event) => setInput({ ...input, url: event.target.value })} />
-          </label>
+          <div className="field-label">
+            <div className="field-label-row">
+              <label htmlFor="bookmark-url">网页地址</label>
+              <button type="button" className="metadata-button"
+                onClick={() => void loadMetadata(true)} disabled={saving || metadataStatus === "loading" || !input.url.trim()}>
+                <RefreshCw aria-hidden="true" size={12} className={metadataStatus === "loading" ? "spinning" : ""} />
+                {metadataStatus === "loading" ? "获取中" : "获取网页信息"}
+              </button>
+            </div>
+            <input id="bookmark-url" autoFocus required type="url" value={input.url} placeholder="https://example.com"
+              onBlur={() => void loadMetadata()}
+              onChange={(event) => {
+                setInput({ ...input, url: event.target.value, faviconUrl: "" });
+                setMetadataStatus("idle");
+              }} />
+            {metadataStatus === "success" && <span className="metadata-hint">已获取网页信息，可继续手动修改</span>}
+            {metadataStatus === "error" && <span className="metadata-hint warning">未能获取网页信息，仍可手动填写并保存</span>}
+          </div>
           <label className="field-label">
             标题 <span>可留空</span>
             <input value={input.title} placeholder="留空时使用网站域名"

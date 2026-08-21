@@ -16,6 +16,12 @@ pub fn sql_plugin() -> tauri_plugin_sql::Builder {
                 sql: include_str!("../migrations/0002_bookmarks.sql"),
                 kind: MigrationKind::Up,
             },
+            Migration {
+                version: 3,
+                description: "add bookmark metadata",
+                sql: include_str!("../migrations/0003_bookmark_metadata.sql"),
+                kind: MigrationKind::Up,
+            },
         ],
     )
 }

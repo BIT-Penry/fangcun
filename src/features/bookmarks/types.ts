@@ -10,6 +10,7 @@ export interface Bookmark {
   normalizedUrl: string;
   title: string;
   description: string;
+  faviconUrl: string | null;
   folderId: string | null;
   folderName: string | null;
   tags: string[];
@@ -21,6 +22,7 @@ export interface BookmarkInput {
   url: string;
   title: string;
   description: string;
+  faviconUrl: string;
   folderName: string;
   tags: string[];
 }
