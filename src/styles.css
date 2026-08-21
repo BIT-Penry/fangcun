@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@theme {
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-text: var(--text);
+  --color-border: var(--border);
+  --color-selected: var(--selected);
+  --color-selected-text: var(--selected-text);
+}
+
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+}
+
+:root,
+:root[data-theme="light"] {
+  --surface: #ffffff;
+  --surface-muted: #f4f4f5;
+  --text: #18181b;
+  --border: #e4e4e7;
+  --selected: #18181b;
+  --selected-text: #ffffff;
+}
+
+:root[data-theme="dark"] {
+  --surface: #18181b;
+  --surface-muted: #27272a;
+  --text: #fafafa;
+  --border: #3f3f46;
+  --selected: #fafafa;
+  --selected-text: #18181b;
+}
+
+body { margin: 0; background: var(--surface); }
+button, input, textarea, select { font: inherit; }
+
+.app-shell { @apply grid min-h-screen grid-cols-[184px_1fr] bg-surface text-text; }
+.app-sidebar { @apply flex flex-col border-r border-border p-3; }
+.app-brand { @apply px-3 py-4 font-medium; }
+.app-navigation { @apply flex min-h-0 flex-1 flex-col gap-1; }
+.app-navigation-spacer { @apply flex-1; }
+.nav-link { @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm; }
+.nav-link-active { @apply bg-selected text-selected-text; }
+.app-content { @apply min-w-0 p-6; }
