@@ -29,6 +29,19 @@
 
 ## Package
 
-`pnpm tauri build --bundles app`
+`pnpm tauri build --bundles app,dmg`
 
-The unsigned application is written under `src-tauri/target/release/bundle/macos/`.
+The unsigned application and DMG are written under `src-tauri/target/release/bundle/`.
+
+The MVP intentionally does not include Apple Developer signing or notarization credentials. Before distributing outside local testing, configure Tauri's macOS signing identity and notarization environment, then rebuild on macOS. Unsigned builds may require the tester to confirm opening them in System Settings → Privacy & Security.
+
+## Data migrations
+
+SQLite migrations live in `src-tauri/migrations/` and are registered in `src-tauri/src/database.rs`. Never edit a migration that has shipped; add the next monotonically increasing migration instead.
+
+Current schema versions:
+
+- 1: settings
+- 2–3: bookmarks and metadata
+- 4: prompts and prompt tags
+- 5: daily entries and Todo items
