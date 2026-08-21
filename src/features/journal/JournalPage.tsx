@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { addLocalDays, formatLocalDate, localDateKey, parseLocalDate } from "../../shared/date";
 import { DailyWorkspace } from "./DailyWorkspace";
 
@@ -26,7 +27,11 @@ function moveMonth(value: string, amount: number): string {
 
 export function JournalPage() {
   const today = localDateKey();
-  const [date, setDate] = useState(today);
+  const [searchParams] = useSearchParams();
+  const requestedDate = searchParams.get("date");
+  const [date, setDate] = useState(
+    requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : today,
+  );
   const days = useMemo(() => monthDays(date), [date]);
   const selectedMonth = parseLocalDate(date).getMonth();
 

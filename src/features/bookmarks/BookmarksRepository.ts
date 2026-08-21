@@ -139,6 +139,21 @@ export class BookmarksRepository implements BookmarksStore {
     }));
   }
 
+  async countExistingBookmarks(normalizedUrls: string[]): Promise<number> {
+    let count = 0;
+    for (let offset = 0; offset < normalizedUrls.length; offset += 400) {
+      const batch = normalizedUrls.slice(offset, offset + 400);
+      if (batch.length === 0) continue;
+      const placeholders = batch.map((_, index) => `$${index + 1}`).join(", ");
+      const [row] = await this.db.select<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM bookmarks WHERE normalized_url IN (${placeholders})`,
+        batch,
+      );
+      count += row?.count ?? 0;
+    }
+    return count;
+  }
+
   async createBookmark(input: BookmarkInput): Promise<void> {
     const normalizedUrl = normalizeBookmarkUrl(input.url);
     const timestamp = this.now();

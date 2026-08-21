@@ -57,5 +57,5 @@ export function parseBookmarkHtml(html: string): BookmarkImportPreview {
   };
 
   parseList(root, []);
-  return { bookmarks, folderPaths, invalidCount, duplicateInFileCount };
+  return { bookmarks, folderPaths, invalidCount, duplicateInFileCount, existingCount: 0 };
 }

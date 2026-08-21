@@ -23,6 +23,7 @@ describe("parseBookmarkHtml", () => {
     }]);
     expect(preview.folderPaths).toEqual([["研究"], ["研究", "论文"]]);
     expect(preview.invalidCount).toBe(1);
+    expect(preview.existingCount).toBe(0);
   });
 
   it("deduplicates normalized URLs inside one file", () => {

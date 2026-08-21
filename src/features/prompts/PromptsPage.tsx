@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Clipboard, Plus, Search, Star, Trash2 } from "lucide-react";
 import { usePromptsStore } from "./PromptsContext";
 import type { Prompt, PromptInput } from "./types";
+import { useSessionState } from "../../shared/useSessionState";
 
 interface PromptDraft extends PromptInput { id: string | null }
 
@@ -25,9 +26,9 @@ export function PromptsPage() {
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [draft, setDraft] = useState<PromptDraft | null>(null);
   const [tagsText, setTagsText] = useState("");
-  const [search, setSearch] = useState("");
-  const [tagFilter, setTagFilter] = useState("");
-  const [favoriteOnly, setFavoriteOnly] = useState(false);
+  const [search, setSearch] = useSessionState("fangcun:prompts:search", "");
+  const [tagFilter, setTagFilter] = useSessionState("fangcun:prompts:tag", "");
+  const [favoriteOnly, setFavoriteOnly] = useSessionState("fangcun:prompts:favorites", false);
   const [loadError, setLoadError] = useState("");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [dirty, setDirty] = useState(false);

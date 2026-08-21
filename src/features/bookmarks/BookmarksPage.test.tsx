@@ -32,6 +32,7 @@ function createStore(overrides: Partial<BookmarksStore> = {}): BookmarksStore {
     deleteBookmark: vi.fn().mockResolvedValue(undefined),
     importBookmarks: vi.fn().mockResolvedValue({ importedCount: 0, updatedCount: 0, skippedCount: 0 }),
     searchBookmarks: vi.fn().mockResolvedValue([]),
+    countExistingBookmarks: vi.fn().mockResolvedValue(0),
     ...overrides,
   };
 }

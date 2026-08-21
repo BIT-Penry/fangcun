@@ -39,6 +39,7 @@ export interface BookmarkImportPreview {
   folderPaths: string[][];
   invalidCount: number;
   duplicateInFileCount: number;
+  existingCount: number;
 }
 
 export interface BookmarkImportResult {
@@ -57,4 +58,5 @@ export interface BookmarksStore {
   deleteBookmark(id: string): Promise<void>;
   importBookmarks(bookmarks: ImportedBookmark[], strategy: BookmarkImportStrategy): Promise<BookmarkImportResult>;
   searchBookmarks(query: string, limit?: number): Promise<Bookmark[]>;
+  countExistingBookmarks(normalizedUrls: string[]): Promise<number>;
 }

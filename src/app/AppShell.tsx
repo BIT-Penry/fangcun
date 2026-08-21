@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Plus, Search } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { PRIMARY_NAV_ITEMS, SETTINGS_NAV_ITEM, type NavigationItem } from "./navigation";
@@ -23,6 +23,7 @@ export function AppShell() {
   const [searchOpen, setSearchOpen] = useState(false);
   const closeSearch = useCallback(() => setSearchOpen(false), []);
   const location = useLocation();
+  const content = useRef<HTMLElement>(null);
   const canQuickAdd = ["/", "/bookmarks", "/prompts", "/journal"].includes(location.pathname);
   const quickAdd = useCallback(() => {
     window.dispatchEvent(new CustomEvent("fangcun:quick-add"));
@@ -43,6 +44,17 @@ export function AppShell() {
     return () => window.removeEventListener("keydown", openSearch);
   }, [canQuickAdd, quickAdd]);
 
+  useLayoutEffect(() => {
+    const element = content.current;
+    if (!element) return;
+    const key = `fangcun:scroll:${location.pathname}`;
+    const saved = Number(window.sessionStorage.getItem(key) ?? 0);
+    element.scrollTop = Number.isFinite(saved) ? saved : 0;
+    return () => {
+      try { window.sessionStorage.setItem(key, String(element.scrollTop)); } catch { /* non-critical UI state */ }
+    };
+  }, [location.pathname]);
+
   return (
     <div className="app-shell">
       <aside className="app-sidebar">
@@ -59,7 +71,7 @@ export function AppShell() {
           <NavigationLink item={SETTINGS_NAV_ITEM} />
         </nav>
       </aside>
-      <main className="app-content"><AppRoutes /></main>
+      <main ref={content} className="app-content"><AppRoutes /></main>
       <GlobalSearch open={searchOpen} onClose={closeSearch} />
     </div>
   );

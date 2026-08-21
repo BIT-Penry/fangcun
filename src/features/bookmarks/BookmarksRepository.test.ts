@@ -123,4 +123,15 @@ describe("BookmarksRepository", () => {
     }], "skip")).resolves.toEqual({ importedCount: 0, updatedCount: 0, skippedCount: 1 });
     expect(execute).not.toHaveBeenCalled();
   });
+
+  it("previews duplicates already stored in the library", async () => {
+    const select = vi.fn().mockResolvedValue([{ count: 2 }]);
+    const repository = new BookmarksRepository({ select, execute: vi.fn() } as unknown as DatabasePort);
+    await expect(repository.countExistingBookmarks([
+      "https://example.com/a", "https://example.com/b", "https://example.com/c",
+    ])).resolves.toBe(2);
+    expect(select).toHaveBeenCalledWith(expect.stringContaining("normalized_url IN ($1, $2, $3)"), [
+      "https://example.com/a", "https://example.com/b", "https://example.com/c",
+    ]);
+  });
 });

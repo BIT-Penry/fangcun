@@ -6,6 +6,7 @@ afterEach(() => {
   cleanup();
   delete document.documentElement.dataset.theme;
   document.documentElement.style.colorScheme = "";
+  window.sessionStorage.clear();
 });
 
 Object.defineProperty(window, "matchMedia", {

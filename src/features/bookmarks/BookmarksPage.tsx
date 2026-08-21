@@ -6,6 +6,7 @@ import { useBookmarksStore } from "./BookmarksContext";
 import type { Bookmark, BookmarkFolder, BookmarkImportPreview, BookmarkImportStrategy, BookmarkInput } from "./types";
 import { bookmarkHostname } from "./url";
 import { openExternalUrl } from "../../shared/openExternal";
+import { useSessionState } from "../../shared/useSessionState";
 
 export function BookmarksPage() {
   const repository = useBookmarksStore();
@@ -13,11 +14,11 @@ export function BookmarksPage() {
   const [folders, setFolders] = useState<BookmarkFolder[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [search, setSearch] = useState("");
-  const [folderFilter, setFolderFilter] = useState("");
-  const [tagFilter, setTagFilter] = useState("");
+  const [search, setSearch] = useSessionState("fangcun:bookmarks:search", "");
+  const [folderFilter, setFolderFilter] = useSessionState("fangcun:bookmarks:folder", "");
+  const [tagFilter, setTagFilter] = useSessionState("fangcun:bookmarks:tag", "");
   const [editor, setEditor] = useState<Bookmark | "new" | null>(null);
-  const [view, setView] = useState<"list" | "grid">("list");
+  const [view, setView] = useSessionState<"list" | "grid">("fangcun:bookmarks:view", "list");
   const [importPreview, setImportPreview] = useState<BookmarkImportPreview | null>(null);
   const [importStrategy, setImportStrategy] = useState<BookmarkImportStrategy>("skip");
   const [importing, setImporting] = useState(false);
@@ -92,7 +93,11 @@ export function BookmarksPage() {
     setLoadError("");
     setImportNotice("");
     try {
-      setImportPreview(parseBookmarkHtml(await file.text()));
+      const preview = parseBookmarkHtml(await file.text());
+      const existingCount = await repository.countExistingBookmarks(
+        preview.bookmarks.map((bookmark) => bookmark.normalizedUrl),
+      );
+      setImportPreview({ ...preview, existingCount });
       setImportStrategy("skip");
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "无法解析 Bookmark HTML 文件");
@@ -249,6 +254,7 @@ export function BookmarksPage() {
               <div className="import-stats">
                 <span><strong>{importPreview.bookmarks.length}</strong> 条有效书签</span>
                 <span><strong>{importPreview.folderPaths.length}</strong> 个文件夹</span>
+                <span><strong>{importPreview.existingCount}</strong> 条资料库重复</span>
                 <span><strong>{importPreview.duplicateInFileCount}</strong> 条文件内重复</span>
                 <span><strong>{importPreview.invalidCount}</strong> 条无效地址</span>
               </div>

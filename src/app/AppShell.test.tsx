@@ -18,6 +18,7 @@ const bookmarks: BookmarksStore = {
   deleteBookmark: async () => undefined,
   importBookmarks: async () => ({ importedCount: 0, updatedCount: 0, skippedCount: 0 }),
   searchBookmarks: async () => [],
+  countExistingBookmarks: async () => 0,
 };
 
 const journal: JournalStore = {
