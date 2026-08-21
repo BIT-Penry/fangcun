@@ -2,14 +2,24 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
+import { BookmarksProvider } from "../features/bookmarks/BookmarksContext";
+import type { BookmarksStore } from "../features/bookmarks/types";
 import { AppShell } from "./AppShell";
+
+const bookmarks: BookmarksStore = {
+  listBookmarks: async () => [],
+  listFolders: async () => [],
+  createBookmark: async () => undefined,
+  updateBookmark: async () => undefined,
+  deleteBookmark: async () => undefined,
+};
 
 describe("AppShell", () => {
   it("renders the minimal navigation and changes pages", async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={["/"]}>
-        <AppShell />
+        <BookmarksProvider repository={bookmarks}><AppShell /></BookmarksProvider>
       </MemoryRouter>,
     );
 

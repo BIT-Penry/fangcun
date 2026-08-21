@@ -21,6 +21,9 @@
   --border: #e4e4e7;
   --selected: #18181b;
   --selected-text: #ffffff;
+  --accent: #9f4f31;
+  --danger: #b42318;
+  --overlay: rgb(24 24 27 / 34%);
 }
 
 :root[data-theme="dark"] {
@@ -30,6 +33,9 @@
   --border: #3f3f46;
   --selected: #fafafa;
   --selected-text: #18181b;
+  --accent: #e3a17b;
+  --danger: #ff8a80;
+  --overlay: rgb(0 0 0 / 62%);
 }
 
 body { margin: 0; background: var(--surface); }
@@ -43,3 +49,100 @@ button, input, textarea, select { font: inherit; }
 .nav-link { @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm; }
 .nav-link-active { @apply bg-selected text-selected-text; }
 .app-content { @apply min-w-0 p-6; }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.bookmarks-page { max-width: 1080px; margin: 0 auto; }
+.bookmarks-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; }
+.bookmarks-header h1 { margin: 3px 0 0; font-size: 30px; line-height: 1.15; letter-spacing: -0.035em; }
+.eyebrow { margin: 0; color: var(--accent); font-size: 10px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; }
+.page-description { margin: 8px 0 0; color: color-mix(in srgb, var(--text) 58%, transparent); font-size: 14px; }
+
+.button-primary,
+.button-secondary,
+.icon-button { border: 0; cursor: pointer; color: inherit; }
+.button-primary,
+.button-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; border-radius: 8px; padding: 0 14px; font-size: 13px; font-weight: 600; }
+.button-primary { background: var(--selected); color: var(--selected-text); }
+.button-secondary { border: 1px solid var(--border); background: var(--surface); }
+.button-primary:hover { opacity: 0.84; }
+.button-secondary:hover,
+.icon-button:hover { background: var(--surface-muted); }
+.button-primary:disabled,
+.button-secondary:disabled,
+.icon-button:disabled { cursor: not-allowed; opacity: 0.55; }
+
+.bookmark-toolbar { display: grid; grid-template-columns: minmax(280px, 1fr) 180px 160px; gap: 10px; margin-top: 30px; }
+.search-field,
+.filter-field { display: flex; align-items: center; min-height: 40px; gap: 9px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); padding: 0 11px; color: color-mix(in srgb, var(--text) 54%, transparent); }
+.search-field:focus-within,
+.filter-field:focus-within { border-color: color-mix(in srgb, var(--text) 56%, var(--border)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 8%, transparent); }
+.search-field input,
+.filter-field select { width: 100%; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 13px; }
+.filter-field select { cursor: pointer; }
+
+.bookmark-result-meta { display: flex; align-items: center; justify-content: space-between; min-height: 40px; color: color-mix(in srgb, var(--text) 52%, transparent); font-size: 12px; }
+.bookmark-result-meta button,
+.inline-error button { border: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: 12px; font-weight: 600; }
+.bookmark-list { display: grid; gap: 10px; padding-bottom: 28px; }
+.bookmark-card { display: flex; align-items: flex-start; justify-content: space-between; gap: 22px; border: 1px solid var(--border); border-radius: 12px; padding: 18px 16px 16px 18px; background: var(--surface); transition: border-color 150ms ease, transform 150ms ease; }
+.bookmark-card:hover { border-color: color-mix(in srgb, var(--text) 32%, var(--border)); transform: translateY(-1px); }
+.bookmark-card-main { min-width: 0; }
+.bookmark-domain { color: var(--accent); font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 10px; letter-spacing: 0.04em; }
+.bookmark-card h2 { margin: 5px 0 0; overflow: hidden; font-size: 16px; line-height: 1.35; letter-spacing: -0.01em; text-overflow: ellipsis; white-space: nowrap; }
+.bookmark-card-main > p { max-width: 720px; margin: 7px 0 0; color: color-mix(in srgb, var(--text) 62%, transparent); font-size: 13px; line-height: 1.55; }
+.bookmark-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 13px; }
+.bookmark-card-meta span { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; background: var(--surface-muted); padding: 4px 8px; color: color-mix(in srgb, var(--text) 68%, transparent); font-size: 11px; }
+.bookmark-card-meta .bookmark-tag { background: color-mix(in srgb, var(--accent) 10%, var(--surface-muted)); color: var(--accent); }
+.bookmark-card-actions { display: flex; flex: none; align-items: center; gap: 2px; }
+.icon-button { display: inline-flex; width: 34px; height: 34px; align-items: center; justify-content: center; border-radius: 8px; background: transparent; text-decoration: none; }
+.icon-button.danger:hover { background: color-mix(in srgb, var(--danger) 10%, transparent); color: var(--danger); }
+
+.bookmark-status,
+.bookmark-empty { color: color-mix(in srgb, var(--text) 58%, transparent); }
+.bookmark-status { margin-top: 48px; text-align: center; font-size: 13px; }
+.bookmark-empty { display: grid; min-height: 330px; place-items: center; align-content: center; border: 1px dashed var(--border); border-radius: 14px; text-align: center; }
+.bookmark-empty-mark { color: var(--accent); font-size: 34px; line-height: 1; }
+.bookmark-empty h2 { margin: 14px 0 0; color: var(--text); font-size: 17px; }
+.bookmark-empty p { max-width: 330px; margin: 8px 0 20px; font-size: 13px; line-height: 1.55; }
+.inline-error { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; border: 1px solid color-mix(in srgb, var(--danger) 34%, var(--border)); border-radius: 9px; background: color-mix(in srgb, var(--danger) 7%, var(--surface)); padding: 10px 12px; color: var(--danger); font-size: 12px; }
+
+.dialog-backdrop { position: fixed; z-index: 50; inset: 0; display: grid; place-items: center; background: var(--overlay); padding: 24px; backdrop-filter: blur(3px); }
+.bookmark-editor { width: min(620px, 100%); max-height: calc(100vh - 48px); overflow: auto; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); box-shadow: 0 24px 80px rgb(0 0 0 / 20%); }
+.bookmark-editor-header { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid var(--border); padding: 22px 24px 18px; }
+.bookmark-editor-header h2 { margin: 4px 0 0; font-size: 21px; letter-spacing: -0.025em; }
+.bookmark-form { display: grid; gap: 17px; padding: 22px 24px 24px; }
+.bookmark-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field-label { display: grid; gap: 7px; color: color-mix(in srgb, var(--text) 78%, transparent); font-size: 12px; font-weight: 600; }
+.field-label > span { margin-left: 4px; color: color-mix(in srgb, var(--text) 40%, transparent); font-weight: 400; }
+.field-label input,
+.field-label textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 8px; outline: 0; background: var(--surface); padding: 10px 11px; color: var(--text); font-size: 13px; font-weight: 400; line-height: 1.4; resize: vertical; }
+.field-label input:focus,
+.field-label textarea:focus { border-color: color-mix(in srgb, var(--text) 56%, var(--border)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 8%, transparent); }
+.form-error { margin: -3px 0 0; color: var(--danger); font-size: 12px; }
+.bookmark-editor-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 3px; }
+
+@media (max-width: 900px) {
+  .bookmark-toolbar { grid-template-columns: 1fr 1fr; }
+  .search-field { grid-column: 1 / -1; }
+}
+
+@media (max-width: 680px) {
+  .app-shell { grid-template-columns: 72px 1fr; }
+  .app-brand, .nav-link span { display: none; }
+  .nav-link { justify-content: center; }
+  .bookmarks-header { align-items: flex-end; }
+  .page-description { display: none; }
+  .bookmark-toolbar, .bookmark-form-grid { grid-template-columns: 1fr; }
+  .search-field { grid-column: auto; }
+}
