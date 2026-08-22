@@ -25,6 +25,7 @@ export function EmojiPicker({ onSelect, actionLabel = "选择表情" }: {
   actionLabel?: string;
 }) {
   const [recent, setRecent] = useState(loadRecentEmoji);
+  const remainingEmoji = EMOJIS.filter((emoji) => !recent.includes(emoji));
 
   const selectEmoji = (emoji: string) => {
     const nextRecent = [emoji, ...recent.filter((item) => item !== emoji)].slice(0, 10);
@@ -52,7 +53,7 @@ export function EmojiPicker({ onSelect, actionLabel = "选择表情" }: {
       )}
       <section>
         <p>所有表情</p>
-        <div className="emoji-grid">{EMOJIS.map(renderEmoji)}</div>
+        <div className="emoji-grid">{remainingEmoji.map(renderEmoji)}</div>
       </section>
     </div>
   );
