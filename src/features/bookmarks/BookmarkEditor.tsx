@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
-import { Plus, RefreshCw, Search, X } from "lucide-react";
-import { fetchBookmarkMetadata, type BookmarkMetadata } from "./metadata";
+import { Plus, Search, Sparkles, X } from "lucide-react";
+import { fetchAiBookmarkMetadata, fetchBookmarkMetadata, type BookmarkMetadata } from "./metadata";
 import type { Bookmark, BookmarkFolder, BookmarkInput } from "./types";
 import { buildBookmarkFolderOptions, folderPathById } from "./folders";
 import { normalizeBookmarkUrl } from "./url";
@@ -24,6 +24,7 @@ export function BookmarkEditor({
   onClose,
   onSave,
   metadataLoader = fetchBookmarkMetadata,
+  aiMetadataLoader = fetchAiBookmarkMetadata,
 }: {
   bookmark: Bookmark | null;
   folders: BookmarkFolder[];
@@ -31,6 +32,7 @@ export function BookmarkEditor({
   onClose: () => void;
   onSave: (input: BookmarkInput) => Promise<void>;
   metadataLoader?: (url: string) => Promise<BookmarkMetadata>;
+  aiMetadataLoader?: (url: string) => Promise<BookmarkMetadata>;
 }) {
   const folderOptions = useMemo(() => buildBookmarkFolderOptions(folders), [folders]);
   const [input, setInput] = useState(() => initialInput(bookmark, folders));
@@ -39,9 +41,12 @@ export function BookmarkEditor({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [metadataStatus, setMetadataStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [metadataMessage, setMetadataMessage] = useState("");
   const lastFetchedUrl = useRef(bookmark?.normalizedUrl ?? "");
+  const titleEdited = useRef(Boolean(bookmark?.title));
+  const descriptionEdited = useRef(Boolean(bookmark?.description));
 
-  const loadMetadata = async (force = false) => {
+  const loadMetadata = async (force = false, useAi = false) => {
     let normalizedUrl: string;
     try {
       normalizedUrl = normalizeBookmarkUrl(input.url);
@@ -53,8 +58,9 @@ export function BookmarkEditor({
 
     lastFetchedUrl.current = normalizedUrl;
     setMetadataStatus("loading");
+    setMetadataMessage(useAi ? "正在读取网页并交给 DeepSeek 整理…" : "正在读取网页信息…");
     try {
-      const metadata = await metadataLoader(normalizedUrl);
+      const metadata = await (useAi ? aiMetadataLoader(normalizedUrl) : metadataLoader(normalizedUrl));
       setInput((current) => {
         try {
           if (normalizeBookmarkUrl(current.url) !== normalizedUrl) return current;
@@ -63,14 +69,24 @@ export function BookmarkEditor({
         }
         return {
           ...current,
-          title: current.title.trim() || metadata.title || "",
-          description: current.description.trim() || metadata.description || "",
-          faviconUrl: metadata.faviconUrl || "",
+          title: (!titleEdited.current || !current.title.trim()) ? metadata.title || current.title : current.title,
+          description: (!descriptionEdited.current || !current.description.trim()) ? metadata.description || current.description : current.description,
+          faviconUrl: metadata.faviconUrl || current.faviconUrl,
         };
       });
-      setMetadataStatus(metadata.title || metadata.description || metadata.faviconUrl ? "success" : "error");
-    } catch {
+      if (metadata.warning) {
+        setMetadataStatus("error");
+        setMetadataMessage(metadata.warning);
+      } else if (metadata.title || metadata.description || metadata.faviconUrl) {
+        setMetadataStatus("success");
+        setMetadataMessage(metadata.aiEnhanced ? "DeepSeek 已生成标题与简介，可继续修改" : "已读取网页原始信息");
+      } else {
+        setMetadataStatus("error");
+        setMetadataMessage("网页没有提供可用信息，仍可手动填写");
+      }
+    } catch (metadataError) {
       setMetadataStatus("error");
+      setMetadataMessage(metadataError instanceof Error ? metadataError.message : String(metadataError));
     }
   };
 
@@ -132,30 +148,32 @@ export function BookmarkEditor({
           <div className="field-label">
             <div className="field-label-row">
               <label htmlFor="bookmark-url">网页地址</label>
-              <button type="button" className="metadata-button"
-                onClick={() => void loadMetadata(true)} disabled={saving || metadataStatus === "loading" || !input.url.trim()}>
-                <RefreshCw aria-hidden="true" size={12} className={metadataStatus === "loading" ? "spinning" : ""} />
-                {metadataStatus === "loading" ? "获取中" : "获取网页信息"}
+              <button type="button" className="metadata-button" data-metadata-ai="true"
+                onClick={() => void loadMetadata(true, true)} disabled={saving || metadataStatus === "loading" || !input.url.trim()}>
+                <Sparkles aria-hidden="true" size={12} className={metadataStatus === "loading" ? "spinning" : ""} />
+                {metadataStatus === "loading" ? "AI 整理中" : "AI 获取网页信息"}
               </button>
             </div>
             <input id="bookmark-url" autoFocus required type="url" value={input.url} placeholder="https://example.com"
-              onBlur={() => void loadMetadata()}
+              onBlur={(event) => {
+                if ((event.relatedTarget as HTMLElement | null)?.dataset.metadataAi !== "true") void loadMetadata();
+              }}
               onChange={(event) => {
                 setInput({ ...input, url: event.target.value, faviconUrl: "" });
                 setMetadataStatus("idle");
+                setMetadataMessage("");
               }} />
-            {metadataStatus === "success" && <span className="metadata-hint">已获取网页信息，可继续手动修改</span>}
-            {metadataStatus === "error" && <span className="metadata-hint warning">未能获取网页信息，仍可手动填写并保存</span>}
+            {metadataMessage && <span className={metadataStatus === "error" ? "metadata-hint warning" : "metadata-hint"}>{metadataMessage}</span>}
           </div>
           <label className="field-label">
             标题 <span>可留空</span>
             <input value={input.title} placeholder="留空时使用网站域名"
-              onChange={(event) => setInput({ ...input, title: event.target.value })} />
+              onChange={(event) => { titleEdited.current = true; setInput({ ...input, title: event.target.value }); }} />
           </label>
           <label className="field-label">
             简介
             <textarea rows={3} value={input.description} placeholder="这条资料为什么值得保留？"
-              onChange={(event) => setInput({ ...input, description: event.target.value })} />
+              onChange={(event) => { descriptionEdited.current = true; setInput({ ...input, description: event.target.value }); }} />
           </label>
 
           <div className="bookmark-form-grid">

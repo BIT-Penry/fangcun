@@ -8,6 +8,7 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 const MAX_HTML_BYTES: usize = 1024 * 1024;
+const MAX_VISIBLE_TEXT_CHARS: usize = 12_000;
 
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,11 +16,48 @@ pub struct BookmarkMetadata {
     title: Option<String>,
     description: Option<String>,
     favicon_url: Option<String>,
+    ai_enhanced: bool,
+    warning: Option<String>,
+}
+
+struct FetchedPage {
+    final_url: String,
+    metadata: BookmarkMetadata,
+    visible_text: String,
 }
 
 #[tauri::command]
 pub async fn fetch_bookmark_metadata(url: String) -> Result<BookmarkMetadata, String> {
-    let requested_url = validate_remote_url(&url)?;
+    Ok(fetch_page(&url).await?.metadata)
+}
+
+#[tauri::command]
+pub async fn fetch_ai_bookmark_metadata(url: String) -> Result<BookmarkMetadata, String> {
+    let page = fetch_page(&url).await?;
+    let input = crate::deepseek::PageSummaryInput {
+        url: &page.final_url,
+        page_title: page.metadata.title.as_deref(),
+        page_description: page.metadata.description.as_deref(),
+        visible_text: &page.visible_text,
+    };
+    match crate::deepseek::enhance_bookmark(input).await {
+        Ok(generated) => Ok(BookmarkMetadata {
+            title: Some(generated.title),
+            description: Some(generated.description),
+            favicon_url: page.metadata.favicon_url,
+            ai_enhanced: true,
+            warning: None,
+        }),
+        Err(error) if error.contains("配置") || error.contains("API Key") => Err(error),
+        Err(error) => Ok(BookmarkMetadata {
+            warning: Some(format!("{error}，已改用网页原始信息")),
+            ..page.metadata
+        }),
+    }
+}
+
+async fn fetch_page(url: &str) -> Result<FetchedPage, String> {
+    let requested_url = validate_remote_url(url)?;
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(10))
@@ -69,7 +107,12 @@ pub async fn fetch_bookmark_metadata(url: String) -> Result<BookmarkMetadata, St
         }
     }
 
-    Ok(parse_metadata(&String::from_utf8_lossy(&bytes), &final_url))
+    let html = String::from_utf8_lossy(&bytes);
+    Ok(FetchedPage {
+        final_url: final_url.to_string(),
+        metadata: parse_metadata(&html, &final_url),
+        visible_text: visible_text(&html),
+    })
 }
 
 fn validate_remote_url(input: &str) -> Result<Url, String> {
@@ -130,7 +173,28 @@ fn parse_metadata(html: &str, base_url: &Url) -> BookmarkMetadata {
         title,
         description,
         favicon_url,
+        ai_enhanced: false,
+        warning: None,
     }
+}
+
+fn visible_text(html: &str) -> String {
+    static HIDDEN_RE: OnceLock<Regex> = OnceLock::new();
+    static TAG_RE: OnceLock<Regex> = OnceLock::new();
+    let hidden_re = HIDDEN_RE.get_or_init(|| {
+        Regex::new(
+            r"(?is)<script\b[^>]*>.*?</script\s*>|<style\b[^>]*>.*?</style\s*>|<noscript\b[^>]*>.*?</noscript\s*>|<svg\b[^>]*>.*?</svg\s*>",
+        )
+        .unwrap()
+    });
+    let tag_re = TAG_RE.get_or_init(|| Regex::new(r"(?is)<[^>]+>").unwrap());
+    decode_entities(&tag_re.replace_all(&hidden_re.replace_all(html, " "), " "))
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(MAX_VISIBLE_TEXT_CHARS)
+        .collect()
 }
 
 fn meta_content(html: &str, key: &str) -> Option<String> {
@@ -248,6 +312,13 @@ mod tests {
 
         assert_eq!(metadata.title.as_deref(), Some("Fangcun Docs"));
         assert_eq!(metadata.description, None);
+        assert!(!metadata.ai_enhanced);
+    }
+
+    #[test]
+    fn extracts_visible_text_without_scripts_or_styles() {
+        let html = "<style>hidden css</style><h1>Useful title</h1><script>ignore me</script><p>A &amp; B</p>";
+        assert_eq!(visible_text(html), "Useful title A & B");
     }
 
     #[test]

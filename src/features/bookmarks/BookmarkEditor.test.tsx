@@ -18,6 +18,8 @@ describe("BookmarkEditor metadata", () => {
       title: "Example Docs",
       description: "Reference guide",
       faviconUrl: "https://example.com/icon.png",
+      aiEnhanced: false,
+      warning: null,
     });
     render(<BookmarkEditor {...baseProps} metadataLoader={metadataLoader} />);
 
@@ -27,7 +29,7 @@ describe("BookmarkEditor metadata", () => {
     await waitFor(() => expect(metadataLoader).toHaveBeenCalledWith("https://example.com/docs"));
     expect(await screen.findByDisplayValue("Example Docs")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Reference guide")).toBeInTheDocument();
-    expect(screen.getByText("已获取网页信息，可继续手动修改")).toBeInTheDocument();
+    expect(screen.getByText("已读取网页原始信息")).toBeInTheDocument();
   });
 
   it("preserves text the user already entered", async () => {
@@ -36,6 +38,8 @@ describe("BookmarkEditor metadata", () => {
       title: "Fetched title",
       description: "Fetched description",
       faviconUrl: null,
+      aiEnhanced: false,
+      warning: null,
     });
     render(<BookmarkEditor {...baseProps} metadataLoader={metadataLoader} />);
 
@@ -50,12 +54,12 @@ describe("BookmarkEditor metadata", () => {
   it("keeps manual saving available when metadata fetching fails", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
-    const metadataLoader = vi.fn().mockRejectedValue(new Error("offline"));
-    render(<BookmarkEditor {...baseProps} onSave={onSave} metadataLoader={metadataLoader} />);
+    const aiMetadataLoader = vi.fn().mockRejectedValue(new Error("offline"));
+    render(<BookmarkEditor {...baseProps} onSave={onSave} aiMetadataLoader={aiMetadataLoader} />);
 
     await user.type(screen.getByLabelText("网页地址"), "https://example.com");
-    await user.click(screen.getByRole("button", { name: "获取网页信息" }));
-    expect(await screen.findByText("未能获取网页信息，仍可手动填写并保存")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "AI 获取网页信息" }));
+    expect(await screen.findByText("offline")).toBeInTheDocument();
     await user.type(screen.getByLabelText(/标题/), "Manual title");
     await user.click(screen.getByRole("button", { name: "保存书签" }));
 
@@ -63,6 +67,26 @@ describe("BookmarkEditor metadata", () => {
       title: "Manual title",
       faviconUrl: "",
     })));
+  });
+
+  it("uses DeepSeek metadata when the user explicitly requests AI整理", async () => {
+    const user = userEvent.setup();
+    const aiMetadataLoader = vi.fn().mockResolvedValue({
+      title: "面向开发者的示例文档",
+      description: "介绍示例接口的主要用途与使用方式。",
+      faviconUrl: "https://example.com/icon.png",
+      aiEnhanced: true,
+      warning: null,
+    });
+    render(<BookmarkEditor {...baseProps} aiMetadataLoader={aiMetadataLoader} />);
+
+    await user.type(screen.getByLabelText("网页地址"), "https://example.com/docs");
+    await user.click(screen.getByRole("button", { name: "AI 获取网页信息" }));
+
+    await waitFor(() => expect(aiMetadataLoader).toHaveBeenCalledWith("https://example.com/docs"));
+    expect(await screen.findByDisplayValue("面向开发者的示例文档")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("介绍示例接口的主要用途与使用方式。")).toBeInTheDocument();
+    expect(screen.getByText("DeepSeek 已生成标题与简介，可继续修改")).toBeInTheDocument();
   });
 
   it("selects nested folders and reuses existing tags", async () => {

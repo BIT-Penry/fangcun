@@ -7,6 +7,13 @@ import { BackupProvider } from "./BackupContext";
 import type { BackupService } from "./BackupService";
 import { SettingsPage } from "./SettingsPage";
 import { BrowserPreferenceProvider } from "../../app/browser/BrowserPreferenceProvider";
+import { getDeepSeekStatus, saveDeepSeekApiKey } from "../../shared/deepseek";
+
+vi.mock("../../shared/deepseek", () => ({
+  getDeepSeekStatus: vi.fn().mockResolvedValue({ configured: false }),
+  saveDeepSeekApiKey: vi.fn().mockResolvedValue(undefined),
+  deleteDeepSeekApiKey: vi.fn().mockResolvedValue(undefined),
+}));
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -106,5 +113,19 @@ describe("SettingsPage", () => {
     await user.selectOptions(screen.getByRole("combobox", { name: "默认浏览器" }), "chrome");
     expect(saveBrowser).toHaveBeenCalledWith("chrome");
     await waitFor(() => expect(screen.getByRole("combobox", { name: "默认浏览器" })).toHaveValue("chrome"));
+  });
+
+  it("validates and saves the DeepSeek API key from settings", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getDeepSeekStatus).mockResolvedValueOnce({ configured: false });
+    vi.mocked(saveDeepSeekApiKey).mockResolvedValueOnce(undefined);
+    renderSettings(vi.fn().mockResolvedValue(undefined));
+
+    expect(await screen.findByText("尚未配置 DeepSeek API Key")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("DeepSeek API Key"), "sk-test-key-123");
+    await user.click(screen.getByRole("button", { name: "验证并保存" }));
+
+    await waitFor(() => expect(saveDeepSeekApiKey).toHaveBeenCalledWith("sk-test-key-123"));
+    expect(screen.getByText("连接成功，API Key 已保存到 macOS 钥匙串")).toBeInTheDocument();
   });
 });

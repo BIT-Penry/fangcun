@@ -8,7 +8,8 @@ import { BrowserPreferenceProvider } from "../../app/browser/BrowserPreferencePr
 import { openExternalUrl } from "../../shared/openExternal";
 
 vi.mock("./metadata", () => ({
-  fetchBookmarkMetadata: vi.fn().mockResolvedValue({ title: null, description: null, faviconUrl: null }),
+  fetchBookmarkMetadata: vi.fn().mockResolvedValue({ title: null, description: null, faviconUrl: null, aiEnhanced: false, warning: null }),
+  fetchAiBookmarkMetadata: vi.fn().mockResolvedValue({ title: null, description: null, faviconUrl: null, aiEnhanced: false, warning: null }),
 }));
 vi.mock("../../shared/openExternal", () => ({ openExternalUrl: vi.fn().mockResolvedValue(undefined) }));
 

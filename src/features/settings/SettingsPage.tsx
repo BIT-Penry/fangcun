@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Archive, Database, ExternalLink, FileInput, Globe2, Monitor, Moon, RotateCcw, Sun } from "lucide-react";
+import { Archive, Database, ExternalLink, FileInput, Globe2, KeyRound, Monitor, Moon, RotateCcw, Sparkles, Sun, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useBrowserPreference } from "../../app/browser/BrowserPreferenceProvider";
 import { useTheme } from "../../app/theme/ThemeProvider";
@@ -7,6 +7,7 @@ import type { ThemePreference } from "../../app/theme/theme";
 import { useBackupService } from "./BackupContext";
 import { openExternalUrl } from "../../shared/openExternal";
 import type { BrowserPreference } from "../../shared/openExternal";
+import { deleteDeepSeekApiKey, getDeepSeekStatus, saveDeepSeekApiKey } from "../../shared/deepseek";
 
 const OPTIONS: readonly { value: ThemePreference; label: string; icon: typeof Monitor }[] = [
   { value: "system", label: "跟随系统", icon: Monitor },
@@ -29,10 +30,54 @@ export function SettingsPage() {
   const [appInfo, setAppInfo] = useState<{ version: string; dataLocation: string } | null>(null);
   const [backupStatus, setBackupStatus] = useState<"idle" | "working" | "success" | "error">("idle");
   const [backupMessage, setBackupMessage] = useState("");
+  const [deepSeekKey, setDeepSeekKey] = useState("");
+  const [deepSeekConfigured, setDeepSeekConfigured] = useState(false);
+  const [deepSeekStatus, setDeepSeekStatus] = useState<"loading" | "idle" | "saving" | "saved" | "error">("loading");
+  const [deepSeekMessage, setDeepSeekMessage] = useState("正在检查钥匙串…");
 
   useEffect(() => {
     void backupService.getAppInfo().then(setAppInfo).catch(() => setAppInfo(null));
+    void getDeepSeekStatus()
+      .then(({ configured }) => {
+        setDeepSeekConfigured(configured);
+        setDeepSeekStatus("idle");
+        setDeepSeekMessage(configured ? "API Key 已安全保存在 macOS 钥匙串" : "尚未配置 DeepSeek API Key");
+      })
+      .catch(() => {
+        setDeepSeekStatus("error");
+        setDeepSeekMessage("无法读取 macOS 钥匙串");
+      });
   }, [backupService]);
+
+  const saveDeepSeekKey = async () => {
+    setDeepSeekStatus("saving");
+    setDeepSeekMessage("正在验证 DeepSeek 连接…");
+    try {
+      await saveDeepSeekApiKey(deepSeekKey);
+      setDeepSeekConfigured(true);
+      setDeepSeekKey("");
+      setDeepSeekStatus("saved");
+      setDeepSeekMessage("连接成功，API Key 已保存到 macOS 钥匙串");
+    } catch (error) {
+      setDeepSeekStatus("error");
+      setDeepSeekMessage(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const removeDeepSeekKey = async () => {
+    if (!window.confirm("删除已保存的 DeepSeek API Key？之后将无法使用 AI 获取网页信息。")) return;
+    setDeepSeekStatus("saving");
+    setDeepSeekMessage("正在删除 API Key…");
+    try {
+      await deleteDeepSeekApiKey();
+      setDeepSeekConfigured(false);
+      setDeepSeekStatus("idle");
+      setDeepSeekMessage("已从 macOS 钥匙串删除 API Key");
+    } catch (error) {
+      setDeepSeekStatus("error");
+      setDeepSeekMessage(error instanceof Error ? error.message : String(error));
+    }
+  };
 
   const createBackup = async () => {
     setBackupStatus("working");
@@ -105,6 +150,31 @@ export function SettingsPage() {
               {BROWSER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </div>
+        </section>
+
+        <section className="settings-card deepseek-card">
+          <header>
+            <div><p className="eyebrow">AI METADATA</p><h2>DeepSeek 网页整理</h2></div>
+            <span className={deepSeekConfigured ? "deepseek-badge configured" : "deepseek-badge"}>
+              <Sparkles aria-hidden="true" size={12} />{deepSeekConfigured ? "已配置" : "未配置"}
+            </span>
+          </header>
+          <div className="deepseek-key-row">
+            <KeyRound aria-hidden="true" size={18} />
+            <label>
+              DeepSeek API Key
+              <input type="password" autoComplete="new-password" value={deepSeekKey}
+                placeholder={deepSeekConfigured ? "输入新 Key 可替换当前配置" : "sk-…"}
+                disabled={deepSeekStatus === "saving"}
+                onChange={(event) => setDeepSeekKey(event.target.value)} />
+            </label>
+            <button type="button" className="button-primary" disabled={!deepSeekKey.trim() || deepSeekStatus === "saving"}
+              onClick={() => void saveDeepSeekKey()}>{deepSeekStatus === "saving" ? "验证中…" : "验证并保存"}</button>
+            {deepSeekConfigured && <button type="button" className="icon-button danger" aria-label="删除 DeepSeek API Key"
+              disabled={deepSeekStatus === "saving"} onClick={() => void removeDeepSeekKey()}><Trash2 aria-hidden="true" size={15} /></button>}
+          </div>
+          <p role="status" className={`deepseek-message ${deepSeekStatus}`}>{deepSeekMessage}</p>
+          <p className="settings-note">仅在你点击“AI 获取网页信息”时发送经过截断的网页文本；API Key 只保存在系统钥匙串，不写入数据库、备份或 Git。</p>
         </section>
 
         <section className="settings-card data-card">
