@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Clipboard, Plus, Search, Star, Trash2 } from "lucide-react";
+import { Check, Clipboard, Plus, Search, Star, Tag, Trash2, X } from "lucide-react";
 import { usePromptsStore } from "./PromptsContext";
 import type { Prompt, PromptInput } from "./types";
 import { useSessionState } from "../../shared/useSessionState";
@@ -153,6 +153,16 @@ export function PromptsPage() {
         && (!favoriteOnly || prompt.isFavorite);
     });
   }, [favoriteOnly, prompts, search, tagFilter]);
+  const promptGroups = useMemo(() => {
+    if (tagFilter) return [{ name: tagFilter, prompts: visiblePrompts }];
+    const tagged = allTags.map((tag) => ({
+      name: tag,
+      prompts: visiblePrompts.filter((prompt) => prompt.tags.includes(tag)),
+    })).filter((group) => group.prompts.length > 0);
+    const untagged = visiblePrompts.filter((prompt) => prompt.tags.length === 0);
+    return untagged.length > 0 ? [...tagged, { name: "未分类", prompts: untagged }] : tagged;
+  }, [allTags, tagFilter, visiblePrompts]);
+  const filtering = Boolean(search || tagFilter || favoriteOnly);
 
   const copyPrompt = async (prompt: Prompt | PromptDraft) => {
     await navigator.clipboard.writeText(prompt.content);
@@ -171,6 +181,24 @@ export function PromptsPage() {
     }
   };
 
+  const closeEditor = useCallback(() => {
+    if (savingRef.current) return;
+    void flushPrompt();
+    setDraft(null);
+    setTagsText("");
+    setDirty(false);
+    setSaveStatus("idle");
+  }, [flushPrompt]);
+
+  useEffect(() => {
+    if (!draft) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeEditor();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [closeEditor, draft]);
+
   return (
     <section className="prompts-page">
       <header className="bookmarks-header">
@@ -184,47 +212,68 @@ export function PromptsPage() {
         </button>
       </header>
 
-      <div className="prompt-workspace">
-        <aside className="prompt-library" aria-label="提示词列表">
-          <label className="search-field">
-            <Search aria-hidden="true" size={16} />
-            <span className="sr-only">搜索提示词</span>
-            <input type="search" value={search} placeholder="搜索标题、正文或标签"
-              onChange={(event) => setSearch(event.target.value)} />
-          </label>
-          <div className="prompt-filters">
-            <select aria-label="按提示词标签筛选" value={tagFilter} onChange={(event) => setTagFilter(event.target.value)}>
-              <option value="">全部标签</option>
-              {allTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
-            </select>
-            <button type="button" className={favoriteOnly ? "filter-toggle active" : "filter-toggle"}
-              aria-pressed={favoriteOnly} onClick={() => setFavoriteOnly((value) => !value)}>
-              <Star aria-hidden="true" size={14} />收藏
-            </button>
-          </div>
-          {loadError && <div role="alert" className="inline-error"><span>{loadError}</span><button onClick={() => void load()}>重试</button></div>}
-          <div className="prompt-list">
-            {visiblePrompts.map((prompt) => (
-              <button key={prompt.id} type="button"
-                className={draft?.id === prompt.id ? "prompt-list-item active" : "prompt-list-item"}
-                onClick={() => selectPrompt(prompt)}>
-                <span className="prompt-list-title">{prompt.title || "未命名提示词"}{prompt.isFavorite && <Star aria-label="已收藏" size={12} fill="currentColor" />}</span>
-                <span>{prompt.content.replace(/\s+/g, " ").slice(0, 72)}</span>
-              </button>
-            ))}
-            {visiblePrompts.length === 0 && <p className="compact-empty">{prompts.length ? "没有符合条件的提示词" : "还没有提示词"}</p>}
-          </div>
-        </aside>
+      <div className="prompt-library-toolbar">
+        <label className="search-field">
+          <Search aria-hidden="true" size={16} />
+          <span className="sr-only">搜索提示词</span>
+          <input type="search" value={search} placeholder="搜索标题、正文或标签"
+            onChange={(event) => setSearch(event.target.value)} />
+        </label>
+        <label className="filter-field">
+          <Tag aria-hidden="true" size={15} />
+          <span className="sr-only">按提示词标签筛选</span>
+          <select aria-label="按提示词标签筛选" value={tagFilter} onChange={(event) => setTagFilter(event.target.value)}>
+            <option value="">全部标签</option>
+            {allTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
+          </select>
+        </label>
+        <button type="button" className={favoriteOnly ? "filter-toggle active" : "filter-toggle"}
+          aria-pressed={favoriteOnly} onClick={() => setFavoriteOnly((value) => !value)}>
+          <Star aria-hidden="true" size={14} />收藏
+        </button>
+        <div className="prompt-result-meta">
+          <span>{visiblePrompts.length} 条提示词</span>
+          {filtering && <button type="button" onClick={() => { setSearch(""); setTagFilter(""); setFavoriteOnly(false); }}>清除筛选</button>}
+        </div>
+      </div>
 
-        <main className="prompt-editor-panel">
-          {!draft ? (
-            <div className="prompt-editor-empty">
-              <div className="bookmark-empty-mark">✦</div>
-              <h2>把好用的表达留下来</h2>
-              <p>选择左侧提示词，或创建一条新的内容。</p>
-              <button type="button" className="button-secondary" onClick={startNewPrompt}>新建提示词</button>
-            </div>
-          ) : (
+      {loadError && <div role="alert" className="inline-error"><span>{loadError}</span><button onClick={() => void load()}>重试</button></div>}
+
+      {visiblePrompts.length > 0 ? (
+        <div className="prompt-catalog" aria-label="提示词库">
+          {promptGroups.map((group) => (
+            <section className="prompt-group" key={group.name}>
+              <header><h2>{group.name}</h2><span>{group.prompts.length}</span></header>
+              <div className="prompt-card-grid">
+                {group.prompts.map((prompt) => (
+                  <button key={`${group.name}-${prompt.id}`} type="button" className="prompt-card" onClick={() => selectPrompt(prompt)}>
+                    <span className="prompt-card-title">{prompt.title || "未命名提示词"}{prompt.isFavorite && <Star aria-label="已收藏" size={13} fill="currentColor" />}</span>
+                    <span className="prompt-card-content">{prompt.content.replace(/\s+/g, " ").slice(0, 160)}</span>
+                    <span className="prompt-card-tags">
+                      {prompt.tags.length > 0 ? prompt.tags.map((tag) => <span key={tag}>{tag}</span>) : <span>未分类</span>}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      ) : (
+        <div className="prompt-catalog-empty">
+          <div className="bookmark-empty-mark">✦</div>
+          <h2>{prompts.length ? "没有符合条件的提示词" : "提示词库还是空的"}</h2>
+          <p>{prompts.length ? "调整搜索或筛选条件，再看看其他内容。" : "使用右上角的“新建提示词”保存第一条内容。"}</p>
+          {filtering && <button type="button" className="button-secondary" onClick={() => { setSearch(""); setTagFilter(""); setFavoriteOnly(false); }}>清除筛选</button>}
+        </div>
+      )}
+
+      {draft && (
+        <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeEditor(); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="prompt-editor-title" className="bookmark-editor prompt-editor-dialog">
+            <header className="bookmark-editor-header">
+              <div><p className="eyebrow">{draft.id ? "PROMPT DETAIL" : "NEW PROMPT"}</p><h2 id="prompt-editor-title">{draft.id ? "编辑提示词" : "新建提示词"}</h2></div>
+              <button type="button" className="icon-button" onClick={closeEditor} disabled={saving} aria-label="关闭"><X aria-hidden="true" size={18} /></button>
+            </header>
             <div className="prompt-editor-form">
               <div className="prompt-editor-topbar">
                 <span role="status" className={`save-status ${saveStatus}`}>
@@ -240,9 +289,9 @@ export function PromptsPage() {
                     onClick={() => void deletePrompt()} aria-label="删除提示词"><Trash2 aria-hidden="true" size={16} /></button>
                 </div>
               </div>
-              <input className="prompt-title-input" aria-label="提示词标题" value={draft.title} placeholder="未命名提示词"
+              <input className="prompt-title-input" aria-label="提示词标题" autoFocus={!draft.id} value={draft.title} placeholder="未命名提示词"
                 onChange={(event) => changeDraft({ title: event.target.value })} />
-              <textarea className="prompt-content-input" aria-label="提示词正文" autoFocus value={draft.content}
+              <textarea className="prompt-content-input" aria-label="提示词正文" value={draft.content}
                 placeholder="在这里写下提示词正文…" onChange={(event) => changeDraft({ content: event.target.value })} />
               <div className="prompt-detail-grid">
                 <label className="field-label">标签 <span>逗号分隔</span>
@@ -264,9 +313,9 @@ export function PromptsPage() {
                   onChange={(event) => changeDraft({ notes: event.target.value })} />
               </label>
             </div>
-          )}
-        </main>
-      </div>
+          </section>
+        </div>
+      )}
     </section>
   );
 }
