@@ -122,24 +122,52 @@ button, input, textarea, select { font: inherit; }
 .bookmark-action-button:hover { background: var(--surface-muted); color: var(--text); }
 .bookmark-action-button.primary { border-color: var(--text); background: var(--text); color: var(--surface); }
 .bookmark-action-button.copied { border-color: color-mix(in srgb, var(--accent) 38%, var(--border)); color: var(--accent); }
-.bookmark-card.compact { min-height: 0; padding: 13px; }
-.bookmark-card.compact .bookmark-url { display: none; }
-.bookmark-card.compact .bookmark-card-meta { margin-top: -2px; }
-.bookmark-folder-view { display: grid; gap: 10px; padding-bottom: 28px; }
-.bookmark-folder-branch,
-.bookmark-unfiled-group { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
-.bookmark-folder-branch > summary,
-.bookmark-unfiled-group > header { display: flex; min-height: 46px; align-items: center; gap: 8px; padding: 0 14px; cursor: pointer; list-style: none; }
-.bookmark-folder-branch > summary::-webkit-details-marker { display: none; }
-.bookmark-folder-branch > summary svg,
-.bookmark-unfiled-group > header svg { color: var(--accent); }
-.bookmark-folder-branch > summary strong,
-.bookmark-unfiled-group h2 { margin: 0; font-size: 12px; }
-.bookmark-folder-branch > summary span,
-.bookmark-unfiled-group > header span { margin-left: auto; color: color-mix(in srgb, var(--text) 42%, transparent); font-size: 10px; }
-.bookmark-folder-contents,
-.bookmark-folder-items { display: grid; gap: 8px; border-top: 1px solid var(--border); padding: 9px; }
-.bookmark-folder-contents .bookmark-folder-branch { margin-left: 14px; }
+.bookmark-folder-view { display: grid; min-height: 430px; grid-template-columns: minmax(190px, 24%) minmax(0, 1fr); overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.bookmark-folder-sidebar { border-right: 1px solid var(--border); background: color-mix(in srgb, var(--surface-muted) 46%, var(--surface)); padding: 12px 9px 18px; }
+.bookmark-folder-root,
+.bookmark-folder-tree-row { display: flex; width: 100%; min-width: 0; min-height: 36px; align-items: center; border-radius: 7px; }
+.bookmark-folder-root { gap: 8px; border: 0; background: transparent; padding: 0 9px; color: color-mix(in srgb, var(--text) 72%, transparent); cursor: pointer; text-align: left; }
+.bookmark-folder-root:hover,
+.bookmark-folder-tree-row:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.bookmark-folder-root.selected,
+.bookmark-folder-tree-row.selected { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--accent); }
+.bookmark-folder-root span,
+.folder-tree-select span { min-width: 0; flex: 1; overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.bookmark-folder-root small,
+.folder-tree-select small { color: color-mix(in srgb, var(--text) 38%, transparent); font-size: 9px; font-weight: 500; }
+.bookmark-folder-tree { margin-top: 4px; }
+.bookmark-folder-tree-children { margin-left: 18px; border-left: 1px solid color-mix(in srgb, var(--border) 72%, transparent); padding-left: 3px; }
+.folder-disclosure { display: grid; width: 25px; height: 30px; flex: none; place-items: center; border: 0; background: transparent; padding: 0; color: color-mix(in srgb, var(--text) 46%, transparent); cursor: pointer; }
+.folder-disclosure:hover { color: var(--text); }
+.folder-disclosure-spacer { width: 25px; flex: none; }
+.folder-tree-select { display: flex; min-width: 0; min-height: 34px; flex: 1; align-items: center; gap: 7px; border: 0; background: transparent; padding: 0 8px 0 0; color: inherit; cursor: pointer; text-align: left; }
+.folder-tree-select > svg { flex: none; color: color-mix(in srgb, currentColor 72%, transparent); }
+.bookmark-folder-browser { min-width: 0; }
+.bookmark-folder-browser > header { display: flex; min-height: 69px; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--border); padding: 0 18px; }
+.bookmark-folder-browser > header p { margin: 0 0 3px; color: color-mix(in srgb, var(--text) 42%, transparent); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; }
+.bookmark-folder-browser > header h2 { margin: 0; font-size: 14px; letter-spacing: -0.01em; }
+.bookmark-folder-browser > header > span { color: color-mix(in srgb, var(--text) 42%, transparent); font-size: 10px; }
+.bookmark-folder-browser-list { display: grid; align-content: start; }
+.bookmark-folder-browser-folder,
+.bookmark-folder-link-row { display: flex; min-width: 0; min-height: 50px; align-items: center; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent); background: transparent; padding: 0 15px; }
+.bookmark-folder-browser-folder { gap: 10px; color: var(--text); cursor: pointer; text-align: left; }
+.bookmark-folder-browser-folder:hover,
+.bookmark-folder-link-row:hover { background: color-mix(in srgb, var(--text) 3.5%, transparent); }
+.bookmark-folder-browser-folder > svg:first-child { color: var(--accent); }
+.bookmark-folder-browser-folder > span { min-width: 0; flex: 1; overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.bookmark-folder-browser-folder > small { color: color-mix(in srgb, var(--text) 40%, transparent); font-size: 10px; }
+.bookmark-folder-browser-folder > svg:last-child { color: color-mix(in srgb, var(--text) 32%, transparent); }
+.bookmark-folder-link-main { display: flex; min-width: 0; flex: 1; align-items: center; gap: 11px; border: 0; background: transparent; padding: 0; color: var(--text); cursor: pointer; text-align: left; }
+.bookmark-folder-link-main img,
+.bookmark-folder-link-fallback { width: 22px; height: 22px; flex: none; border-radius: 5px; object-fit: contain; }
+.bookmark-folder-link-fallback { display: grid; place-items: center; background: var(--surface-muted); color: color-mix(in srgb, var(--text) 54%, transparent); font-size: 9px; font-weight: 700; }
+.bookmark-folder-link-main > span:last-child { min-width: 0; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.bookmark-folder-link-actions { display: flex; flex: none; align-items: center; gap: 2px; opacity: 0; transition: opacity 120ms ease; }
+.bookmark-folder-link-row:hover .bookmark-folder-link-actions,
+.bookmark-folder-link-row:focus-within .bookmark-folder-link-actions { opacity: 1; }
+.bookmark-folder-link-actions .icon-button { width: 30px; height: 30px; color: color-mix(in srgb, var(--text) 55%, transparent); }
+.bookmark-folder-link-actions .icon-button.copied { color: var(--accent); }
+.bookmark-folder-browser-empty { margin: 0; padding: 54px 20px; color: color-mix(in srgb, var(--text) 42%, transparent); font-size: 12px; text-align: center; }
 .icon-button { display: inline-flex; width: 34px; height: 34px; align-items: center; justify-content: center; border-radius: 8px; background: transparent; text-decoration: none; }
 .icon-button.danger:hover { background: color-mix(in srgb, var(--danger) 10%, transparent); color: var(--danger); }
 
@@ -465,6 +493,9 @@ button, input, textarea, select { font: inherit; }
   .todo-details-editor { grid-template-columns: 1fr; }
   .emoji-grid { grid-template-columns: repeat(8, minmax(24px, 1fr)); }
   .bookmark-list.link-view { grid-template-columns: 1fr; }
+  .bookmark-folder-view { grid-template-columns: 1fr; }
+  .bookmark-folder-sidebar { max-height: 230px; overflow: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+  .bookmark-folder-link-actions { opacity: 1; }
   .view-toggle { justify-self: stretch; }
   .view-toggle button { flex: 1; }
   .bookmark-header-actions .button-secondary { display: none; }

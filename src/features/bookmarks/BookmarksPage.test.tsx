@@ -113,9 +113,14 @@ describe("BookmarksPage", () => {
 
     await screen.findByRole("heading", { name: "PyTorch 文档" });
     await user.click(screen.getByRole("button", { name: "文件夹视图" }));
-    expect(screen.getByText("研究", { selector: "strong" })).toBeInTheDocument();
-    expect(screen.getByText("论文", { selector: "strong" })).toBeInTheDocument();
-    expect(screen.getByText("研究 / 论文", { selector: ".bookmark-card-meta span" })).toBeInTheDocument();
+    const expandResearch = screen.getByRole("button", { name: "展开文件夹 研究" });
+    expect(expandResearch).toHaveAttribute("aria-expanded", "false");
+    await user.click(expandResearch);
+    expect(screen.getByRole("button", { name: "收起文件夹 研究" })).toHaveAttribute("aria-expanded", "true");
+    await user.click(screen.getByRole("button", { name: "查看文件夹 论文" }));
+    expect(screen.getByRole("heading", { name: "研究 / 论文" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开书签 PyTorch 文档" })).toBeInTheDocument();
+    expect(document.querySelector(".bookmark-card")).not.toBeInTheDocument();
   });
 
   it("shows a field-level error for unsupported URLs", async () => {
