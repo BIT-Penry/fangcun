@@ -64,7 +64,10 @@ describe("PromptsPage", () => {
     const dialog = screen.getByRole("dialog", { name: "编辑提示词" });
     const tagInput = within(dialog).getByRole("textbox", { name: "搜索或新建标签" });
     await user.click(tagInput);
-    await user.click(within(dialog).getByRole("option", { name: "写作" }));
+    const writingTag = within(dialog).getByRole("checkbox", { name: "写作" });
+    await user.click(writingTag);
+    expect(writingTag).toBeChecked();
+    expect(within(dialog).getByRole("checkbox", { name: "研究" })).toBeChecked();
     await user.type(tagInput, "灵感");
     await user.click(within(dialog).getByRole("button", { name: "创建“灵感”" }));
     window.dispatchEvent(new Event("blur"));

@@ -218,10 +218,12 @@ button, input, textarea, select { font: inherit; }
 .tag-combobox-input { display: flex; align-items: center; gap: 7px; padding: 0 5px; color: color-mix(in srgb, var(--text) 42%, transparent); }
 .field-label .tag-combobox-input input { min-width: 0; border: 0; background: transparent; padding: 6px 0; box-shadow: none; }
 .tag-options { position: absolute; z-index: 4; top: calc(100% + 6px); right: 0; left: 0; display: grid; max-height: 190px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 5px; box-shadow: 0 14px 34px rgb(0 0 0 / 13%); }
-.tag-options button { display: flex; min-height: 33px; align-items: center; gap: 8px; border: 0; border-radius: 7px; background: transparent; padding: 0 9px; color: var(--text); cursor: pointer; text-align: left; font-size: 11px; }
-.tag-options button:hover,
-.tag-options button[aria-selected="true"] { background: var(--surface-muted); }
-.tag-option-check { display: grid; width: 16px; height: 16px; flex: none; place-items: center; border: 1px solid var(--border); border-radius: 5px; color: var(--accent); }
+.tag-options label,
+.tag-options button { display: flex; min-height: 33px; align-items: center; gap: 8px; border: 0; border-radius: 7px; background: transparent; padding: 0 9px; color: var(--text); cursor: pointer; text-align: left; font-size: 11px; font-weight: 400; }
+.tag-options label:hover,
+.tag-options label:has(input:checked),
+.tag-options button:hover { background: var(--surface-muted); }
+.field-label .tag-options input { width: 15px; height: 15px; flex: none; margin: 0; border: 0; padding: 0; accent-color: var(--accent); box-shadow: none; }
 .tag-options .create-tag-option { border-top: 1px solid var(--border); border-radius: 0 0 7px 7px; color: var(--accent); font-weight: 600; }
 .tag-options p { margin: 10px; color: color-mix(in srgb, var(--text) 45%, transparent); font-size: 11px; font-weight: 400; }
 

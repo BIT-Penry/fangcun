@@ -368,12 +368,13 @@ export function PromptsPage() {
                           if (event.key === "Enter") { event.preventDefault(); addTag(tagQuery); }
                         }} />
                     </div>
-                    {tagPickerOpen && <div id="prompt-tag-options" className="tag-options" role="listbox" aria-label="可用标签" aria-multiselectable="true">
-                      {matchingTags.map((tag) => <button key={tag} type="button" role="option" aria-selected={selectedTags.includes(tag)} onClick={() => toggleTag(tag)}>
-                        <span className="tag-option-check">{selectedTags.includes(tag) && <Check aria-hidden="true" size={12} />}</span>{tag}
-                      </button>)}
+                    {tagPickerOpen && <div id="prompt-tag-options" className="tag-options" role="group" aria-label="可用标签">
+                      {matchingTags.map((tag) => <label key={tag} onMouseDown={(event) => event.preventDefault()}>
+                        <input type="checkbox" checked={selectedTags.includes(tag)} onChange={() => toggleTag(tag)} />
+                        <span>{tag}</span>
+                      </label>)}
                       {tagQuery.trim() && !allTags.some((tag) => tag.toLocaleLowerCase() === tagQuery.trim().toLocaleLowerCase()) &&
-                        <button type="button" className="create-tag-option" onClick={() => addTag(tagQuery)}><Plus aria-hidden="true" size={13} />创建“{tagQuery.trim()}”</button>}
+                        <button type="button" className="create-tag-option" onMouseDown={(event) => event.preventDefault()} onClick={() => addTag(tagQuery)}><Plus aria-hidden="true" size={13} />创建“{tagQuery.trim()}”</button>}
                       {matchingTags.length === 0 && !tagQuery.trim() && <p>还没有可复用的标签</p>}
                     </div>}
                   </div>
