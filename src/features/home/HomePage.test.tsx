@@ -8,10 +8,13 @@ import { HomePage } from "./HomePage";
 
 const journal: JournalStore = {
   getEntry: vi.fn().mockResolvedValue(""),
+  getEntryMood: vi.fn().mockResolvedValue(null),
   saveEntry: vi.fn().mockResolvedValue(undefined),
+  setEntryMood: vi.fn().mockResolvedValue(undefined),
   listTodos: vi.fn().mockResolvedValue([]),
   createTodo: vi.fn().mockResolvedValue("todo-1"),
   updateTodoContent: vi.fn().mockResolvedValue(undefined),
+  updateTodoDetails: vi.fn().mockResolvedValue(undefined),
   setTodoCompleted: vi.fn().mockResolvedValue(undefined),
   moveTodo: vi.fn().mockResolvedValue(undefined),
   reorderTodos: vi.fn().mockResolvedValue(undefined),

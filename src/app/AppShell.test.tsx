@@ -23,10 +23,13 @@ const bookmarks: BookmarksStore = {
 
 const journal: JournalStore = {
   getEntry: async () => "",
+  getEntryMood: async () => null,
   saveEntry: async () => undefined,
+  setEntryMood: async () => undefined,
   listTodos: async () => [],
   createTodo: async () => "todo-1",
   updateTodoContent: async () => undefined,
+  updateTodoDetails: async () => undefined,
   setTodoCompleted: async () => undefined,
   moveTodo: async () => undefined,
   reorderTodos: async () => undefined,

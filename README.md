@@ -19,7 +19,7 @@ Fangcun 0.1 is a complete local-first MVP for macOS. Core data stays in SQLite u
 - Save, edit, filter, tag, and open bookmarks; fetch page metadata with bounded network requests.
 - Import Netscape Bookmark HTML with nested folders, duplicate preview, and invalid-link reporting.
 - Create searchable prompt cards with independent tags, favorites, clipboard copy, and 500 ms autosave.
-- Keep daily Markdown-compatible notes and ordered Todo lists, including completion and date migration.
+- Keep daily Markdown notes with preview, Emoji and a daily mood; manage ordered Todos with optional due times, priorities, completion grouping, and date migration.
 - Use the Home page as a live view of today's journal data.
 - Search bookmarks, prompts, journal entries, and Todo items with `Command + K`.
 - Create versioned ZIP backups and restore them after an automatic safety snapshot.

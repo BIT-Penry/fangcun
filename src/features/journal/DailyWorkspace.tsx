@@ -1,14 +1,41 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Check, GripVertical, Plus, Trash2 } from "lucide-react";
+import {
+  Check, Clock3, Flag, GripVertical, ListPlus, Plus, SmilePlus, SlidersHorizontal, Trash2,
+} from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { addLocalDays, formatLocalDate, localDateKey } from "../../shared/date";
+import { openExternalUrl } from "../../shared/openExternal";
+import { EmojiPicker } from "./EmojiPicker";
 import { useJournalStore } from "./JournalContext";
-import type { Todo } from "./types";
+import type { Todo, TodoDetails, TodoPriority } from "./types";
+
+const PRIORITY_LABELS: Record<TodoPriority, string> = {
+  high: "高优先级",
+  medium: "中优先级",
+  low: "低优先级",
+};
+
+function groupTodos(todos: Todo[]): Todo[] {
+  return [...todos].sort((left, right) => (
+    Number(left.isCompleted) - Number(right.isCompleted)
+    || left.sortOrder - right.sortOrder
+  ));
+}
 
 export function DailyWorkspace({ date, compact = false }: { date: string; compact?: boolean }) {
   const repository = useJournalStore();
   const [entry, setEntry] = useState("");
+  const [moodEmoji, setMoodEmoji] = useState<string | null>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [newTodo, setNewTodo] = useState("");
+  const [newTodoDueTime, setNewTodoDueTime] = useState("");
+  const [newTodoPriority, setNewTodoPriority] = useState<"" | TodoPriority>("");
+  const [showNewTodoDetails, setShowNewTodoDetails] = useState(false);
+  const [expandedTodoId, setExpandedTodoId] = useState<string | null>(null);
+  const [entryMode, setEntryMode] = useState<"write" | "preview">("write");
+  const [showEntryEmojiPicker, setShowEntryEmojiPicker] = useState(false);
+  const [showMoodPicker, setShowMoodPicker] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [entryDirty, setEntryDirty] = useState(false);
@@ -18,6 +45,7 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
   const entryDirtyRef = useRef(false);
   const draggedTodo = useRef<string | null>(null);
   const newTodoInput = useRef<HTMLInputElement>(null);
+  const entryInput = useRef<HTMLTextAreaElement>(null);
 
   latestEntry.current = entry;
   entryDirtyRef.current = entryDirty;
@@ -26,12 +54,15 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
     setLoading(true);
     setError("");
     try {
-      const [content, nextTodos] = await Promise.all([
+      const [content, nextMoodEmoji, nextTodos] = await Promise.all([
         repository.getEntry(date),
+        repository.getEntryMood(date),
         repository.listTodos(date),
       ]);
       setEntry(content);
-      setTodos(nextTodos);
+      setMoodEmoji(nextMoodEmoji);
+      setTodos(groupTodos(nextTodos));
+      setEntryMode("write");
       setEntryDirty(false);
       entryDirtyRef.current = false;
       setEntryStatus("idle");
@@ -82,24 +113,46 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
     };
   }, [date, repository]);
 
+  const changeEntry = (value: string) => {
+    latestEntry.current = value;
+    entryRevision.current += 1;
+    setEntry(value);
+    setEntryDirty(true);
+    entryDirtyRef.current = true;
+    setEntryStatus("idle");
+  };
+
   const addTodo = async (event: FormEvent) => {
     event.preventDefault();
     if (!newTodo.trim()) return;
     try {
-      await repository.createTodo(date, newTodo);
+      await repository.createTodo(date, newTodo, {
+        dueTime: newTodoDueTime || null,
+        priority: newTodoPriority || null,
+      });
       setNewTodo("");
-      setTodos(await repository.listTodos(date));
+      setNewTodoDueTime("");
+      setNewTodoPriority("");
+      setShowNewTodoDetails(false);
+      setTodos(groupTodos(await repository.listTodos(date)));
     } catch {
       setError("新增 Todo 失败，请重试");
     }
   };
 
   const setCompleted = async (todo: Todo, completed: boolean) => {
-    setTodos((current) => current.map((item) => item.id === todo.id ? { ...item, isCompleted: completed } : item));
+    setTodos((current) => {
+      const lastOrder = current.reduce((maximum, item) => Math.max(maximum, item.sortOrder), -1);
+      return groupTodos(current.map((item) => (
+        item.id === todo.id
+          ? { ...item, isCompleted: completed, sortOrder: completed ? lastOrder + 1 : item.sortOrder }
+          : item
+      )));
+    });
     try {
       await repository.setTodoCompleted(todo.id, completed);
     } catch {
-      setTodos((current) => current.map((item) => item.id === todo.id ? todo : item));
+      setTodos((current) => groupTodos(current.map((item) => item.id === todo.id ? todo : item)));
       setError("更新 Todo 失败，请重试");
     }
   };
@@ -114,6 +167,16 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
     } catch {
       setTodos((current) => current.map((item) => item.id === todo.id ? todo : item));
       setError("更新 Todo 失败，请重试");
+    }
+  };
+
+  const updateDetails = async (todo: Todo, details: TodoDetails) => {
+    setTodos((current) => current.map((item) => item.id === todo.id ? { ...item, ...details } : item));
+    try {
+      await repository.updateTodoDetails(todo.id, details);
+    } catch {
+      setTodos((current) => current.map((item) => item.id === todo.id ? todo : item));
+      setError("更新 Todo 详情失败，请重试");
     }
   };
 
@@ -140,22 +203,118 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
     const sourceId = draggedTodo.current;
     draggedTodo.current = null;
     if (!sourceId || sourceId === targetId) return;
+    const sourceTodo = todos.find((todo) => todo.id === sourceId);
+    const targetTodo = todos.find((todo) => todo.id === targetId);
+    if (!sourceTodo || !targetTodo || sourceTodo.isCompleted !== targetTodo.isCompleted) return;
     const reordered = [...todos];
     const sourceIndex = reordered.findIndex((todo) => todo.id === sourceId);
     const targetIndex = reordered.findIndex((todo) => todo.id === targetId);
     const [source] = reordered.splice(sourceIndex, 1);
     reordered.splice(targetIndex, 0, source);
-    setTodos(reordered.map((todo, index) => ({ ...todo, sortOrder: index })));
+    const withOrder = reordered.map((todo, index) => ({ ...todo, sortOrder: index }));
+    setTodos(withOrder);
     try {
-      await repository.reorderTodos(reordered.map((todo) => todo.id));
+      await repository.reorderTodos(withOrder.map((todo) => todo.id));
     } catch {
       setTodos(todos);
       setError("调整顺序失败，请重试");
     }
   };
 
+  const chooseMood = async (emoji: string | null) => {
+    const previousMood = moodEmoji;
+    setMoodEmoji(emoji);
+    setShowMoodPicker(false);
+    try {
+      await repository.setEntryMood(date, emoji);
+    } catch {
+      setMoodEmoji(previousMood);
+      setError("保存今日状态失败，请重试");
+    }
+  };
+
+  const insertEmoji = (emoji: string) => {
+    const input = entryInput.current;
+    const start = input?.selectionStart ?? entry.length;
+    const end = input?.selectionEnd ?? entry.length;
+    const nextEntry = `${entry.slice(0, start)}${emoji}${entry.slice(end)}`;
+    changeEntry(nextEntry);
+    setShowEntryEmojiPicker(false);
+    setEntryMode("write");
+    window.setTimeout(() => {
+      entryInput.current?.focus();
+      entryInput.current?.setSelectionRange(start + emoji.length, start + emoji.length);
+    }, 0);
+  };
+
+  const openMarkdownLink = (href: string | undefined) => {
+    if (!href) return;
+    void openExternalUrl(href).catch(() => setError("无法打开这个链接"));
+  };
+
   const today = localDateKey();
   const tomorrow = addLocalDays(today, 1);
+  const openTodos = todos.filter((todo) => !todo.isCompleted);
+  const completedTodos = todos.filter((todo) => todo.isCompleted);
+
+  const renderTodo = (todo: Todo) => (
+    <article key={todo.id} className={todo.isCompleted ? "todo-item completed" : "todo-item"}
+      draggable onDragStart={() => { draggedTodo.current = todo.id; }}
+      onDragOver={(event) => event.preventDefault()} onDrop={() => void dropBefore(todo.id)}>
+      <div className="todo-main">
+        <GripVertical aria-label="拖动排序" className="todo-grip" size={15} />
+        <input type="checkbox" aria-label={`完成 ${todo.content}`} checked={todo.isCompleted}
+          onChange={(event) => void setCompleted(todo, event.target.checked)} />
+        <div className="todo-copy">
+          <input className="todo-content" aria-label={`Todo：${todo.content}`} value={todo.content}
+            onChange={(event) => setTodos((current) => current.map((item) => (
+              item.id === todo.id ? { ...item, content: event.target.value } : item
+            )))}
+            onBlur={(event) => void updateContent(todo, event.target.value)} />
+          {(todo.dueTime || todo.priority) && (
+            <div className="todo-meta">
+              {todo.dueTime && <span><Clock3 aria-hidden="true" size={11} />{todo.dueTime}</span>}
+              {todo.priority && <span className={`priority-${todo.priority}`}><Flag aria-hidden="true" size={11} />{PRIORITY_LABELS[todo.priority]}</span>}
+            </div>
+          )}
+        </div>
+        <button type="button" className={expandedTodoId === todo.id ? "icon-button active" : "icon-button"}
+          onClick={() => setExpandedTodoId((current) => current === todo.id ? null : todo.id)}
+          aria-expanded={expandedTodoId === todo.id} aria-label={`任务详情 ${todo.content}`}>
+          <SlidersHorizontal aria-hidden="true" size={14} />
+        </button>
+        <button type="button" className="icon-button danger" onClick={() => void deleteTodo(todo)} aria-label={`删除 ${todo.content}`}>
+          <Trash2 aria-hidden="true" size={14} />
+        </button>
+      </div>
+      {expandedTodoId === todo.id && (
+        <div className="todo-details-editor">
+          <label>截止时刻
+            <input type="time" aria-label={`设置 ${todo.content} 的截止时刻`} value={todo.dueTime ?? ""}
+              onChange={(event) => void updateDetails(todo, { dueTime: event.target.value || null, priority: todo.priority })} />
+          </label>
+          <label>优先级
+            <select aria-label={`设置 ${todo.content} 的优先级`} value={todo.priority ?? ""}
+              onChange={(event) => void updateDetails(todo, { dueTime: todo.dueTime, priority: (event.target.value || null) as TodoPriority | null })}>
+              <option value="">无</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option>
+            </select>
+          </label>
+          <label>移动到
+            <select aria-label={`移动 ${todo.content} 到日期`} defaultValue=""
+              onChange={(event) => { void moveTodo(todo, event.target.value); event.currentTarget.value = ""; }}>
+              <option value="" disabled>快捷日期</option>
+              {date !== today && <option value={today}>今天</option>}
+              {date !== tomorrow && <option value={tomorrow}>明天</option>}
+            </select>
+          </label>
+          <label>指定日期
+            <input type="date" aria-label={`指定 ${todo.content} 的日期`} value={date}
+              onChange={(event) => void moveTodo(todo, event.target.value)} />
+          </label>
+        </div>
+      )}
+    </article>
+  );
 
   return (
     <section className={compact ? "daily-workspace compact" : "daily-workspace"} aria-label={formatLocalDate(date)}>
@@ -165,37 +324,36 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
           <section className="todo-panel">
             <div className="daily-section-heading">
               <div><p className="eyebrow">TO DO</p><h2>今日清单</h2></div>
-              <span>{todos.filter((todo) => todo.isCompleted).length}/{todos.length}</span>
+              <span>{completedTodos.length}/{todos.length}</span>
             </div>
             <form className="todo-add-form" onSubmit={(event) => void addTodo(event)}>
-              <input ref={newTodoInput} aria-label="新增 Todo" value={newTodo} placeholder="添加一件要做的事…"
-                onChange={(event) => setNewTodo(event.target.value)} />
-              <button type="submit" className="icon-button" disabled={!newTodo.trim()} aria-label="添加 Todo"><Plus aria-hidden="true" size={17} /></button>
+              <div className="todo-add-main">
+                <input ref={newTodoInput} aria-label="新增 Todo" value={newTodo} placeholder="添加一件要做的事…"
+                  onChange={(event) => setNewTodo(event.target.value)} />
+                <button type="button" className={showNewTodoDetails ? "icon-button active" : "icon-button"}
+                  aria-expanded={showNewTodoDetails} aria-label="添加截止时刻和优先级"
+                  onClick={() => setShowNewTodoDetails((current) => !current)}>
+                  <ListPlus aria-hidden="true" size={16} />
+                </button>
+                <button type="submit" className="icon-button" disabled={!newTodo.trim()} aria-label="添加 Todo"><Plus aria-hidden="true" size={17} /></button>
+              </div>
+              {showNewTodoDetails && (
+                <div className="todo-add-details">
+                  <label>截止时刻<input type="time" aria-label="新 Todo 截止时刻" value={newTodoDueTime}
+                    onChange={(event) => setNewTodoDueTime(event.target.value)} /></label>
+                  <label>优先级<select aria-label="新 Todo 优先级" value={newTodoPriority}
+                    onChange={(event) => setNewTodoPriority(event.target.value as "" | TodoPriority)}>
+                    <option value="">无</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option>
+                  </select></label>
+                </div>
+              )}
             </form>
             <div className="todo-list">
-              {todos.map((todo) => (
-                <article key={todo.id} className={todo.isCompleted ? "todo-item completed" : "todo-item"}
-                  draggable onDragStart={() => { draggedTodo.current = todo.id; }}
-                  onDragOver={(event) => event.preventDefault()} onDrop={() => void dropBefore(todo.id)}>
-                  <GripVertical aria-label="拖动排序" className="todo-grip" size={15} />
-                  <input type="checkbox" aria-label={`完成 ${todo.content}`} checked={todo.isCompleted}
-                    onChange={(event) => void setCompleted(todo, event.target.checked)} />
-                  <input className="todo-content" aria-label={`Todo：${todo.content}`} value={todo.content}
-                    onChange={(event) => setTodos((current) => current.map((item) => item.id === todo.id ? { ...item, content: event.target.value } : item))}
-                    onBlur={(event) => void updateContent(todo, event.target.value)} />
-                  <select className="todo-move" aria-label={`移动 ${todo.content} 到日期`} defaultValue=""
-                    onChange={(event) => { void moveTodo(todo, event.target.value); event.currentTarget.value = ""; }}>
-                    <option value="" disabled>移动</option>
-                    {date !== today && <option value={today}>今天</option>}
-                    {date !== tomorrow && <option value={tomorrow}>明天</option>}
-                  </select>
-                  <input className="todo-date-move" type="date" aria-label={`指定 ${todo.content} 的日期`}
-                    value={date} onChange={(event) => void moveTodo(todo, event.target.value)} />
-                  <button type="button" className="icon-button danger" onClick={() => void deleteTodo(todo)} aria-label={`删除 ${todo.content}`}>
-                    <Trash2 aria-hidden="true" size={14} />
-                  </button>
-                </article>
-              ))}
+              {openTodos.map(renderTodo)}
+              {completedTodos.length > 0 && (
+                <div className="todo-completed-heading"><span>已完成</span><span>{completedTodos.length}</span></div>
+              )}
+              {completedTodos.map(renderTodo)}
               {todos.length === 0 && <p className="compact-empty">这一天还没有 Todo</p>}
             </div>
           </section>
@@ -203,22 +361,50 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
           <section className="entry-panel">
             <div className="daily-section-heading">
               <div><p className="eyebrow">JOURNAL</p><h2>随笔</h2></div>
-              <span role="status" className={`save-status ${entryStatus}`}>
-                {entryStatus === "saving" && "保存中…"}
-                {entryStatus === "saved" && <><Check aria-hidden="true" size={13} />已保存</>}
-                {entryStatus === "error" && "保存失败"}
-                {entryStatus === "idle" && "自动保存"}
-              </span>
+              <div className="entry-heading-actions">
+                <button type="button" className={moodEmoji ? "mood-button selected" : "mood-button"}
+                  onClick={() => { setShowMoodPicker((current) => !current); setShowEntryEmojiPicker(false); }}
+                  aria-expanded={showMoodPicker} aria-label={moodEmoji ? `今日状态 ${moodEmoji}` : "选择今日状态"}>
+                  {moodEmoji ?? <SmilePlus aria-hidden="true" size={15} />}
+                </button>
+                <span role="status" className={`save-status ${entryStatus}`}>
+                  {entryStatus === "saving" && "保存中…"}
+                  {entryStatus === "saved" && <><Check aria-hidden="true" size={13} />已保存</>}
+                  {entryStatus === "error" && "保存失败"}
+                  {entryStatus === "idle" && "自动保存"}
+                </span>
+              </div>
             </div>
-            <textarea aria-label="每日随笔" value={entry} placeholder="写下今天的想法、进展或片段…"
-              onChange={(event) => {
-                latestEntry.current = event.target.value;
-                entryRevision.current += 1;
-                setEntry(event.target.value);
-                setEntryDirty(true);
-                entryDirtyRef.current = true;
-                setEntryStatus("idle");
-              }} />
+            {showMoodPicker && (
+              <div className="entry-picker-wrap">
+                {moodEmoji && <button type="button" className="clear-mood-button" onClick={() => void chooseMood(null)}>清除今日状态</button>}
+                <EmojiPicker actionLabel="设为今日状态" onSelect={(emoji) => void chooseMood(emoji)} />
+              </div>
+            )}
+            <div className="entry-toolbar" aria-label="随笔工具栏">
+              <div className="editor-mode-switch">
+                <button type="button" className={entryMode === "write" ? "active" : ""} onClick={() => setEntryMode("write")}>编辑</button>
+                <button type="button" className={entryMode === "preview" ? "active" : ""} onClick={() => setEntryMode("preview")}>预览</button>
+              </div>
+              <button type="button" className={showEntryEmojiPicker ? "icon-button active" : "icon-button"}
+                onClick={() => { setShowEntryEmojiPicker((current) => !current); setShowMoodPicker(false); }}
+                aria-expanded={showEntryEmojiPicker} aria-label="插入 Emoji">
+                <SmilePlus aria-hidden="true" size={15} />
+              </button>
+            </div>
+            {showEntryEmojiPicker && <EmojiPicker actionLabel="插入表情" onSelect={insertEmoji} />}
+            {entryMode === "write" ? (
+              <textarea ref={entryInput} aria-label="每日随笔" value={entry} placeholder="用 Markdown 写下今天的想法、进展或片段…"
+                onChange={(event) => changeEntry(event.target.value)} />
+            ) : (
+              <div className="markdown-preview" aria-label="Markdown 预览">
+                {entry.trim() ? (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+                    a: ({ href, children }) => <a href={href} onClick={(event) => { event.preventDefault(); openMarkdownLink(href); }}>{children}</a>,
+                  }}>{entry}</ReactMarkdown>
+                ) : <p className="markdown-empty">还没有内容，切换到编辑开始书写。</p>}
+              </div>
+            )}
           </section>
         </div>
       )}

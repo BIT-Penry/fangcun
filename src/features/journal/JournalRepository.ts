@@ -1,5 +1,5 @@
 import type { DatabasePort } from "../../shared/db/types";
-import type { JournalSearchHit, JournalStore, Todo } from "./types";
+import type { JournalSearchHit, JournalStore, Todo, TodoDetails, TodoPriority } from "./types";
 import { likePattern } from "../../shared/db/search";
 
 interface TodoRow {
@@ -8,6 +8,8 @@ interface TodoRow {
   content: string;
   is_completed: number;
   sort_order: number;
+  due_time: string | null;
+  priority: TodoPriority | null;
   created_at: string;
   updated_at: string;
 }
@@ -27,6 +29,14 @@ export class JournalRepository implements JournalStore {
     return entry?.content ?? "";
   }
 
+  async getEntryMood(date: string): Promise<string | null> {
+    const [entry] = await this.db.select<{ mood_emoji: string | null }>(
+      "SELECT mood_emoji FROM daily_entries WHERE entry_date = $1 LIMIT 1",
+      [date],
+    );
+    return entry?.mood_emoji ?? null;
+  }
+
   async saveEntry(date: string, content: string): Promise<void> {
     const timestamp = this.now();
     await this.db.execute(
@@ -37,10 +47,20 @@ export class JournalRepository implements JournalStore {
     );
   }
 
+  async setEntryMood(date: string, moodEmoji: string | null): Promise<void> {
+    const timestamp = this.now();
+    await this.db.execute(
+      `INSERT INTO daily_entries(id, entry_date, content, mood_emoji, created_at, updated_at)
+       VALUES ($1, $2, '', $3, $4, $4)
+       ON CONFLICT(entry_date) DO UPDATE SET mood_emoji = excluded.mood_emoji, updated_at = excluded.updated_at`,
+      [this.createId(), date, moodEmoji, timestamp],
+    );
+  }
+
   async listTodos(date: string): Promise<Todo[]> {
     const rows = await this.db.select<TodoRow>(
-      `SELECT id, todo_date, content, is_completed, sort_order, created_at, updated_at
-       FROM todos WHERE todo_date = $1 ORDER BY sort_order, created_at`,
+      `SELECT id, todo_date, content, is_completed, sort_order, due_time, priority, created_at, updated_at
+       FROM todos WHERE todo_date = $1 ORDER BY is_completed, sort_order, created_at`,
       [date],
     );
     return rows.map((row) => ({
@@ -49,13 +69,18 @@ export class JournalRepository implements JournalStore {
       content: row.content,
       isCompleted: Boolean(row.is_completed),
       sortOrder: row.sort_order,
+      dueTime: row.due_time,
+      priority: row.priority,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
   }
 
-  async createTodo(date: string, content: string): Promise<string> {
+  async createTodo(date: string, content: string, details: Partial<TodoDetails> = {}): Promise<string> {
     if (!content.trim()) throw new Error("Todo 内容不能为空");
+    const dueTime = details.dueTime ?? null;
+    const priority = details.priority ?? null;
+    this.validateTodoDetails({ dueTime, priority });
     const [row] = await this.db.select<{ next_order: number }>(
       "SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM todos WHERE todo_date = $1",
       [date],
@@ -63,9 +88,9 @@ export class JournalRepository implements JournalStore {
     const id = this.createId();
     const timestamp = this.now();
     await this.db.execute(
-      `INSERT INTO todos(id, todo_date, content, is_completed, sort_order, created_at, updated_at)
-       VALUES ($1, $2, $3, 0, $4, $5, $5)`,
-      [id, date, content.trim(), row?.next_order ?? 0, timestamp],
+      `INSERT INTO todos(id, todo_date, content, is_completed, sort_order, due_time, priority, created_at, updated_at)
+       VALUES ($1, $2, $3, 0, $4, $5, $6, $7, $7)`,
+      [id, date, content.trim(), row?.next_order ?? 0, dueTime, priority, timestamp],
     );
     return id;
   }
@@ -78,9 +103,24 @@ export class JournalRepository implements JournalStore {
     );
   }
 
+  async updateTodoDetails(id: string, details: TodoDetails): Promise<void> {
+    this.validateTodoDetails(details);
+    await this.db.execute(
+      "UPDATE todos SET due_time = $1, priority = $2, updated_at = $3 WHERE id = $4",
+      [details.dueTime, details.priority, this.now(), id],
+    );
+  }
+
   async setTodoCompleted(id: string, completed: boolean): Promise<void> {
     await this.db.execute(
-      "UPDATE todos SET is_completed = $1, updated_at = $2 WHERE id = $3",
+      `UPDATE todos
+       SET is_completed = $1,
+           sort_order = CASE WHEN $1 = 1 THEN (
+             SELECT COALESCE(MAX(peer.sort_order), -1) + 1
+             FROM todos AS peer WHERE peer.todo_date = todos.todo_date
+           ) ELSE sort_order END,
+           updated_at = $2
+       WHERE id = $3`,
       [completed ? 1 : 0, this.now(), id],
     );
   }
@@ -139,5 +179,14 @@ export class JournalRepository implements JournalStore {
        ORDER BY date DESC LIMIT $2`,
       [pattern, limit],
     );
+  }
+
+  private validateTodoDetails(details: TodoDetails): void {
+    if (details.dueTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(details.dueTime)) {
+      throw new Error("截止时刻格式无效");
+    }
+    if (details.priority && !["low", "medium", "high"].includes(details.priority)) {
+      throw new Error("Todo 优先级无效");
+    }
   }
 }
