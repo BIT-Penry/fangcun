@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { Archive, Database, ExternalLink, FileInput, Monitor, Moon, RotateCcw, Sun } from "lucide-react";
+import { Archive, Database, ExternalLink, FileInput, Globe2, Monitor, Moon, RotateCcw, Sun } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useBrowserPreference } from "../../app/browser/BrowserPreferenceProvider";
 import { useTheme } from "../../app/theme/ThemeProvider";
 import type { ThemePreference } from "../../app/theme/theme";
 import { useBackupService } from "./BackupContext";
 import { openExternalUrl } from "../../shared/openExternal";
+import type { BrowserPreference } from "../../shared/openExternal";
 
 const OPTIONS: readonly { value: ThemePreference; label: string; icon: typeof Monitor }[] = [
   { value: "system", label: "跟随系统", icon: Monitor },
@@ -12,8 +14,17 @@ const OPTIONS: readonly { value: ThemePreference; label: string; icon: typeof Mo
   { value: "dark", label: "深色", icon: Moon },
 ];
 
+const BROWSER_OPTIONS: readonly { value: BrowserPreference; label: string }[] = [
+  { value: "system", label: "跟随系统" },
+  { value: "safari", label: "Safari" },
+  { value: "chrome", label: "Chrome" },
+  { value: "edge", label: "Edge" },
+  { value: "firefox", label: "Firefox" },
+];
+
 export function SettingsPage() {
   const { preference, setPreference, saveStatus } = useTheme();
+  const { preference: browserPreference, setPreference: setBrowserPreference, saveStatus: browserSaveStatus } = useBrowserPreference();
   const backupService = useBackupService();
   const [appInfo, setAppInfo] = useState<{ version: string; dataLocation: string } | null>(null);
   const [backupStatus, setBackupStatus] = useState<"idle" | "working" | "success" | "error">("idle");
@@ -74,6 +85,25 @@ export function SettingsPage() {
                 <Icon aria-hidden="true" size={18} /><span>{option.label}</span>
               </label>;
             })}
+          </div>
+        </section>
+
+        <section className="settings-card browser-card">
+          <header>
+            <div><p className="eyebrow">LINK HANDOFF</p><h2>默认浏览器</h2></div>
+            <span role="status" className={`save-status ${browserSaveStatus}`}>
+              {browserSaveStatus === "saving" && "保存中…"}
+              {browserSaveStatus === "saved" && "已保存"}
+              {browserSaveStatus === "error" && "保存失败"}
+            </span>
+          </header>
+          <div className="browser-preference-row">
+            <Globe2 aria-hidden="true" size={18} />
+            <div><strong>书签打开方式</strong><span>指定浏览器不可用时会自动退回系统默认。</span></div>
+            <select aria-label="默认浏览器" value={browserPreference} disabled={browserSaveStatus === "saving"}
+              onChange={(event) => void setBrowserPreference(event.target.value as BrowserPreference)}>
+              {BROWSER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
           </div>
         </section>
 

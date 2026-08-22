@@ -11,14 +11,17 @@ import { initializeDatabase } from "../shared/db/database";
 import type { DatabasePort } from "../shared/db/types";
 import { SettingsRepository } from "../shared/settings/SettingsRepository";
 import { AppShell } from "./AppShell";
+import { BrowserPreferenceProvider } from "./browser/BrowserPreferenceProvider";
 import type { ThemePreference } from "./theme/theme";
 import { ThemeProvider } from "./theme/ThemeProvider";
+import type { BrowserPreference } from "../shared/openExternal";
 
 type BootstrapState =
   | { status: "loading" }
   | {
       status: "ready";
       theme: ThemePreference;
+      browser: BrowserPreference;
       settingsRepository: SettingsRepository;
       bookmarksRepository: BookmarksRepository;
       promptsRepository: PromptsRepository;
@@ -39,9 +42,13 @@ export function AppBootstrap({ loadDatabase = initializeDatabase }: {
     loadDatabase()
       .then(async (db) => {
         const settingsRepository = new SettingsRepository(db);
-        const theme = await settingsRepository.getThemePreference();
+        const [theme, browser] = await Promise.all([
+          settingsRepository.getThemePreference(),
+          settingsRepository.getBrowserPreference(),
+        ]);
         return {
           theme,
+          browser,
           settingsRepository,
           bookmarksRepository: new BookmarksRepository(db),
           promptsRepository: new PromptsRepository(db),
@@ -63,15 +70,20 @@ export function AppBootstrap({ loadDatabase = initializeDatabase }: {
       initialPreference={state.theme}
       onPreferenceChange={(value) => state.settingsRepository.setThemePreference(value)}
     >
-      <BookmarksProvider repository={state.bookmarksRepository}>
-        <PromptsProvider repository={state.promptsRepository}>
-          <JournalProvider repository={state.journalRepository}>
-            <BackupProvider service={state.backupService}>
-              <AppShell />
-            </BackupProvider>
-          </JournalProvider>
-        </PromptsProvider>
-      </BookmarksProvider>
+      <BrowserPreferenceProvider
+        initialPreference={state.browser}
+        onPreferenceChange={(value) => state.settingsRepository.setBrowserPreference(value)}
+      >
+        <BookmarksProvider repository={state.bookmarksRepository}>
+          <PromptsProvider repository={state.promptsRepository}>
+            <JournalProvider repository={state.journalRepository}>
+              <BackupProvider service={state.backupService}>
+                <AppShell />
+              </BackupProvider>
+            </JournalProvider>
+          </PromptsProvider>
+        </BookmarksProvider>
+      </BrowserPreferenceProvider>
     </ThemeProvider>
   );
 }

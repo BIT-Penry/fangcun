@@ -1,5 +1,6 @@
 mod bookmark_metadata;
 mod database;
+mod external_browser;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -9,7 +10,8 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            bookmark_metadata::fetch_bookmark_metadata
+            bookmark_metadata::fetch_bookmark_metadata,
+            external_browser::open_url_with_browser
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fangcun");

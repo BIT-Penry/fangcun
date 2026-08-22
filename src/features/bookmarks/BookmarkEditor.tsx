@@ -1,16 +1,18 @@
-import { useRef, useState, type FormEvent } from "react";
-import { RefreshCw, X } from "lucide-react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
+import { Plus, RefreshCw, Search, X } from "lucide-react";
 import { fetchBookmarkMetadata, type BookmarkMetadata } from "./metadata";
 import type { Bookmark, BookmarkFolder, BookmarkInput } from "./types";
+import { buildBookmarkFolderOptions, folderPathById } from "./folders";
 import { normalizeBookmarkUrl } from "./url";
 
-function initialInput(bookmark: Bookmark | null): BookmarkInput {
+function initialInput(bookmark: Bookmark | null, folders: BookmarkFolder[]): BookmarkInput {
+  const folderPath = bookmark?.folderId ? folderPathById(folders).get(bookmark.folderId) : null;
   return {
     url: bookmark?.url ?? "",
     title: bookmark?.title ?? "",
     description: bookmark?.description ?? "",
     faviconUrl: bookmark?.faviconUrl ?? "",
-    folderName: bookmark?.folderName ?? "",
+    folderName: folderPath ?? bookmark?.folderName ?? "",
     tags: bookmark?.tags ?? [],
   };
 }
@@ -18,18 +20,22 @@ function initialInput(bookmark: Bookmark | null): BookmarkInput {
 export function BookmarkEditor({
   bookmark,
   folders,
+  availableTags,
   onClose,
   onSave,
   metadataLoader = fetchBookmarkMetadata,
 }: {
   bookmark: Bookmark | null;
   folders: BookmarkFolder[];
+  availableTags: string[];
   onClose: () => void;
   onSave: (input: BookmarkInput) => Promise<void>;
   metadataLoader?: (url: string) => Promise<BookmarkMetadata>;
 }) {
-  const [input, setInput] = useState(() => initialInput(bookmark));
-  const [tagsText, setTagsText] = useState(() => input.tags.join(", "));
+  const folderOptions = useMemo(() => buildBookmarkFolderOptions(folders), [folders]);
+  const [input, setInput] = useState(() => initialInput(bookmark, folders));
+  const [tagQuery, setTagQuery] = useState("");
+  const [tagPickerOpen, setTagPickerOpen] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [metadataStatus, setMetadataStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -76,7 +82,7 @@ export function BookmarkEditor({
       setSaving(true);
       await onSave({
         ...input,
-        tags: tagsText.split(",").map((tag) => tag.trim()).filter(Boolean),
+        tags: input.tags,
       });
     } catch (saveError) {
       setError(saveError instanceof Error
@@ -85,6 +91,29 @@ export function BookmarkEditor({
       setSaving(false);
     }
   };
+
+  const toggleTag = (tag: string) => {
+    setInput((current) => ({
+      ...current,
+      tags: current.tags.includes(tag) ? current.tags.filter((value) => value !== tag) : [...current.tags, tag],
+    }));
+  };
+
+  const addTag = () => {
+    const normalized = tagQuery.trim();
+    if (!normalized) return;
+    const existing = [...availableTags, ...input.tags]
+      .find((tag) => tag.toLocaleLowerCase() === normalized.toLocaleLowerCase());
+    const tag = existing ?? normalized;
+    if (!input.tags.includes(tag)) setInput((current) => ({ ...current, tags: [...current.tags, tag] }));
+    setTagQuery("");
+    setTagPickerOpen(true);
+  };
+
+  const matchingTags = availableTags.filter((tag) => {
+    const needle = tagQuery.trim().toLocaleLowerCase();
+    return !needle || tag.toLocaleLowerCase().includes(needle);
+  });
 
   return (
     <div className="dialog-backdrop">
@@ -130,19 +159,42 @@ export function BookmarkEditor({
           </label>
 
           <div className="bookmark-form-grid">
-            <label className="field-label">
-              文件夹 <span>可新建</span>
-              <input list="bookmark-folder-options" value={input.folderName} placeholder="例如：论文"
+            <div className="field-label bookmark-folder-picker">
+              文件夹 <span>选择已有文件夹，或用 / 创建层级</span>
+              <select aria-label="选择已有文件夹" value={folderOptions.some((folder) => folder.path === input.folderName) ? input.folderName : ""}
+                onChange={(event) => setInput({ ...input, folderName: event.target.value })}>
+                <option value="">不放入文件夹</option>
+                {folderOptions.map((folder) => <option key={folder.id} value={folder.path}>{folder.path}</option>)}
+              </select>
+              <input aria-label="新建文件夹路径" value={input.folderName} placeholder="例如：研究 / 论文 / UAV"
                 onChange={(event) => setInput({ ...input, folderName: event.target.value })} />
-              <datalist id="bookmark-folder-options">
-                {folders.map((folder) => <option key={folder.id} value={folder.name} />)}
-              </datalist>
-            </label>
-            <label className="field-label">
-              标签 <span>逗号分隔</span>
-              <input value={tagsText} placeholder="研究, 工具"
-                onChange={(event) => setTagsText(event.target.value)} />
-            </label>
+            </div>
+            <div className="field-label">
+              标签 <span>勾选已有标签，或输入名称创建</span>
+              <div className="tag-combobox" onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setTagPickerOpen(false);
+              }}>
+                {input.tags.length > 0 && <div className="selected-tag-list">
+                  {input.tags.map((tag) => <span key={tag}>{tag}<button type="button" aria-label={`移除标签 ${tag}`} onClick={() => toggleTag(tag)}><X aria-hidden="true" size={11} /></button></span>)}
+                </div>}
+                <div className="tag-combobox-input">
+                  <Search aria-hidden="true" size={14} />
+                  <input aria-label="搜索或新建书签标签" value={tagQuery} placeholder="搜索或新建标签"
+                    aria-expanded={tagPickerOpen} aria-controls="bookmark-tag-options"
+                    onFocus={() => setTagPickerOpen(true)} onChange={(event) => { setTagQuery(event.target.value); setTagPickerOpen(true); }}
+                    onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addTag(); } }} />
+                </div>
+                {tagPickerOpen && <div id="bookmark-tag-options" className="tag-options" role="group" aria-label="可用书签标签">
+                  {matchingTags.map((tag) => <label key={tag} onMouseDown={(event) => event.preventDefault()}>
+                    <input type="checkbox" checked={input.tags.includes(tag)} onChange={() => toggleTag(tag)} />
+                    <span>{tag}</span>
+                  </label>)}
+                  {tagQuery.trim() && ![...availableTags, ...input.tags].some((tag) => tag.toLocaleLowerCase() === tagQuery.trim().toLocaleLowerCase()) &&
+                    <button type="button" className="create-tag-option" onMouseDown={(event) => event.preventDefault()} onClick={addTag}><Plus aria-hidden="true" size={13} />创建“{tagQuery.trim()}”</button>}
+                  {matchingTags.length === 0 && !tagQuery.trim() && <p>还没有可复用的标签</p>}
+                </div>}
+              </div>
+            </div>
           </div>
 
           {error && <p role="alert" className="form-error">{error}</p>}

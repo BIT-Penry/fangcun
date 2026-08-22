@@ -6,6 +6,7 @@ import { BookmarkEditor } from "./BookmarkEditor";
 const baseProps = {
   bookmark: null,
   folders: [],
+  availableTags: [],
   onClose: vi.fn(),
   onSave: vi.fn().mockResolvedValue(undefined),
 };
@@ -61,6 +62,27 @@ describe("BookmarkEditor metadata", () => {
     await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
       title: "Manual title",
       faviconUrl: "",
+    })));
+  });
+
+  it("selects nested folders and reuses existing tags", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<BookmarkEditor {...baseProps} onSave={onSave} availableTags={["研究", "工具"]} folders={[
+      { id: "research", name: "研究", parentId: null },
+      { id: "papers", name: "论文", parentId: "research" },
+    ]} />);
+
+    await user.type(screen.getByLabelText("网页地址"), "https://example.com");
+    await user.selectOptions(screen.getByRole("combobox", { name: "选择已有文件夹" }), "研究 / 论文");
+    await user.click(screen.getByLabelText("搜索或新建书签标签"));
+    await user.click(screen.getByRole("checkbox", { name: "研究" }));
+    expect(screen.getByRole("checkbox", { name: "研究" })).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "保存书签" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      folderName: "研究 / 论文",
+      tags: ["研究"],
     })));
   });
 });

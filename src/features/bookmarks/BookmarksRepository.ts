@@ -285,22 +285,8 @@ export class BookmarksRepository implements BookmarksStore {
   }
 
   private async ensureFolder(nameInput: string, timestamp: string): Promise<string | null> {
-    const name = nameInput.trim();
-    if (!name) return null;
-    const existing = await this.db.select<{ id: string }>(
-      `SELECT id FROM bookmark_folders
-       WHERE parent_id IS NULL AND name = $1 COLLATE NOCASE
-       LIMIT 1`,
-      [name],
-    );
-    if (existing[0]) return existing[0].id;
-    const id = this.createId();
-    await this.db.execute(
-      `INSERT INTO bookmark_folders(id, parent_id, name, sort_order, created_at, updated_at)
-       VALUES ($1, NULL, $2, 0, $3, $3)`,
-      [id, name, timestamp],
-    );
-    return id;
+    const path = nameInput.split(/[\\/]/).map((name) => name.trim()).filter(Boolean);
+    return this.ensureFolderPath(path, timestamp, []);
   }
 
   private async ensureFolderPath(path: string[], timestamp: string, createdIds: string[]): Promise<string | null> {

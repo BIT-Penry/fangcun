@@ -66,6 +66,39 @@ describe("BookmarksRepository", () => {
     expect(execute).toHaveBeenCalledTimes(5);
   });
 
+  it("creates nested folders from a manually entered path", async () => {
+    const select = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const execute = vi.fn().mockResolvedValue({ rowsAffected: 1 });
+    const ids = ["folder-research", "folder-papers", "bookmark-1"];
+    const repository = new BookmarksRepository(
+      { select, execute } as unknown as DatabasePort,
+      () => ids.shift() ?? "extra-id",
+      () => "2026-08-21T00:00:00.000Z",
+    );
+
+    await repository.createBookmark({
+      url: "https://example.com/paper",
+      title: "论文主页",
+      description: "",
+      faviconUrl: "",
+      folderName: "研究 / 论文",
+      tags: [],
+    });
+
+    expect(execute).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO bookmark_folders"), [
+      "folder-research", null, "研究", "2026-08-21T00:00:00.000Z",
+    ]);
+    expect(execute).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO bookmark_folders"), [
+      "folder-papers", "folder-research", "论文", "2026-08-21T00:00:00.000Z",
+    ]);
+    expect(execute).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO bookmarks"), [
+      "bookmark-1", "https://example.com/paper", "https://example.com/paper", "论文主页",
+      "", null, "folder-papers", "2026-08-21T00:00:00.000Z",
+    ]);
+  });
+
   it("reports duplicate normalized URLs", async () => {
     const execute = vi.fn()
       .mockRejectedValueOnce(new Error("UNIQUE constraint failed: bookmarks.normalized_url"));

@@ -6,6 +6,7 @@ import { ThemeProvider, useTheme } from "../../app/theme/ThemeProvider";
 import { BackupProvider } from "./BackupContext";
 import type { BackupService } from "./BackupService";
 import { SettingsPage } from "./SettingsPage";
+import { BrowserPreferenceProvider } from "../../app/browser/BrowserPreferenceProvider";
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -32,11 +33,17 @@ function createBackupService(overrides: Partial<BackupService> = {}): BackupServ
   } as unknown as BackupService;
 }
 
-function renderSettings(onPreferenceChange: (preference: "system" | "light" | "dark") => Promise<void>, backupService = createBackupService()) {
+function renderSettings(
+  onPreferenceChange: (preference: "system" | "light" | "dark") => Promise<void>,
+  backupService = createBackupService(),
+  onBrowserChange = vi.fn().mockResolvedValue(undefined),
+) {
   return render(
     <MemoryRouter>
       <ThemeProvider initialPreference="system" onPreferenceChange={onPreferenceChange}>
-        <BackupProvider service={backupService}><SettingsPage /></BackupProvider>
+        <BrowserPreferenceProvider initialPreference="system" onPreferenceChange={onBrowserChange}>
+          <BackupProvider service={backupService}><SettingsPage /></BackupProvider>
+        </BrowserPreferenceProvider>
       </ThemeProvider>
     </MemoryRouter>,
   );
@@ -90,5 +97,14 @@ describe("SettingsPage", () => {
     await user.click(screen.getByRole("button", { name: "创建完整备份" }));
     await waitFor(() => expect(backupService.createBackup).toHaveBeenCalledOnce());
     expect(screen.getByText(/备份已保存至/)).toHaveTextContent("/backup/fangcun.zip");
+  });
+
+  it("persists the preferred browser", async () => {
+    const user = userEvent.setup();
+    const saveBrowser = vi.fn().mockResolvedValue(undefined);
+    renderSettings(vi.fn().mockResolvedValue(undefined), createBackupService(), saveBrowser);
+    await user.selectOptions(screen.getByRole("combobox", { name: "默认浏览器" }), "chrome");
+    expect(saveBrowser).toHaveBeenCalledWith("chrome");
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "默认浏览器" })).toHaveValue("chrome"));
   });
 });

@@ -4,10 +4,13 @@ import { describe, expect, it, vi } from "vitest";
 import { BookmarksProvider } from "./BookmarksContext";
 import { BookmarksPage } from "./BookmarksPage";
 import type { Bookmark, BookmarksStore } from "./types";
+import { BrowserPreferenceProvider } from "../../app/browser/BrowserPreferenceProvider";
+import { openExternalUrl } from "../../shared/openExternal";
 
 vi.mock("./metadata", () => ({
   fetchBookmarkMetadata: vi.fn().mockResolvedValue({ title: null, description: null, faviconUrl: null }),
 }));
+vi.mock("../../shared/openExternal", () => ({ openExternalUrl: vi.fn().mockResolvedValue(undefined) }));
 
 const savedBookmark: Bookmark = {
   id: "bookmark-1",
@@ -37,8 +40,12 @@ function createStore(overrides: Partial<BookmarksStore> = {}): BookmarksStore {
   };
 }
 
-function renderPage(repository: BookmarksStore) {
-  return render(<BookmarksProvider repository={repository}><BookmarksPage /></BookmarksProvider>);
+function renderPage(repository: BookmarksStore, browser: "system" | "chrome" = "system") {
+  return render(
+    <BrowserPreferenceProvider initialPreference={browser}>
+      <BookmarksProvider repository={repository}><BookmarksPage /></BookmarksProvider>
+    </BrowserPreferenceProvider>,
+  );
 }
 
 describe("BookmarksPage", () => {
@@ -64,8 +71,8 @@ describe("BookmarksPage", () => {
     const dialog = screen.getByRole("dialog", { name: "添加书签" });
     await user.type(within(dialog).getByLabelText("网页地址"), "https://example.com/docs");
     await user.type(within(dialog).getByLabelText(/标题/), "Example Docs");
-    await user.type(within(dialog).getByLabelText(/文件夹/), "文档");
-    await user.type(within(dialog).getByLabelText(/标签/), "API, 参考");
+    await user.type(within(dialog).getByLabelText("新建文件夹路径"), "文档");
+    await user.type(within(dialog).getByLabelText("搜索或新建书签标签"), "API{Enter}参考{Enter}");
     await user.click(within(dialog).getByRole("button", { name: "保存书签" }));
 
     await waitFor(() => expect(repository.createBookmark).toHaveBeenCalledWith({
@@ -77,6 +84,38 @@ describe("BookmarksPage", () => {
       tags: ["API", "参考"],
     }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("opens in the selected browser and copies a bookmark link", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    renderPage(createStore(), "chrome");
+
+    await screen.findByRole("heading", { name: "PyTorch 文档" });
+    await user.click(screen.getByRole("button", { name: "打开 PyTorch 文档" }));
+    expect(openExternalUrl).toHaveBeenCalledWith("https://pytorch.org/docs", "chrome");
+    await user.click(screen.getByRole("button", { name: "复制 PyTorch 文档 的链接" }));
+    expect(writeText).toHaveBeenCalledWith("https://pytorch.org/docs");
+    expect(screen.getByRole("button", { name: "复制 PyTorch 文档 的链接" })).toHaveTextContent("已复制");
+  });
+
+  it("shows nested bookmarks in the folder view", async () => {
+    const user = userEvent.setup();
+    const nestedBookmark = { ...savedBookmark, folderId: "folder-papers", folderName: "论文" };
+    renderPage(createStore({
+      listBookmarks: vi.fn().mockResolvedValue([nestedBookmark]),
+      listFolders: vi.fn().mockResolvedValue([
+        { id: "folder-research", name: "研究", parentId: null },
+        { id: "folder-papers", name: "论文", parentId: "folder-research" },
+      ]),
+    }));
+
+    await screen.findByRole("heading", { name: "PyTorch 文档" });
+    await user.click(screen.getByRole("button", { name: "文件夹视图" }));
+    expect(screen.getByText("研究", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByText("论文", { selector: "strong" })).toBeInTheDocument();
+    expect(screen.getByText("研究 / 论文", { selector: ".bookmark-card-meta span" })).toBeInTheDocument();
   });
 
   it("shows a field-level error for unsupported URLs", async () => {

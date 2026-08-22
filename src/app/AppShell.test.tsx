@@ -9,6 +9,7 @@ import type { JournalStore } from "../features/journal/types";
 import { PromptsProvider } from "../features/prompts/PromptsContext";
 import type { PromptsStore } from "../features/prompts/types";
 import { AppShell } from "./AppShell";
+import { BrowserPreferenceProvider } from "./browser/BrowserPreferenceProvider";
 
 const bookmarks: BookmarksStore = {
   listBookmarks: async () => [],
@@ -49,13 +50,15 @@ describe("AppShell", () => {
   it("renders the minimal navigation and changes pages", async () => {
     const user = userEvent.setup();
     render(
-      <MemoryRouter initialEntries={["/"]}>
-        <BookmarksProvider repository={bookmarks}>
-          <PromptsProvider repository={prompts}>
-            <JournalProvider repository={journal}><AppShell /></JournalProvider>
-          </PromptsProvider>
-        </BookmarksProvider>
-      </MemoryRouter>,
+      <BrowserPreferenceProvider>
+        <MemoryRouter initialEntries={["/"]}>
+          <BookmarksProvider repository={bookmarks}>
+            <PromptsProvider repository={prompts}>
+              <JournalProvider repository={journal}><AppShell /></JournalProvider>
+            </PromptsProvider>
+          </BookmarksProvider>
+        </MemoryRouter>
+      </BrowserPreferenceProvider>,
     );
 
     const navigation = screen.getByRole("navigation", { name: "主导航" });
@@ -72,13 +75,15 @@ describe("AppShell", () => {
   it("opens global search with Command K", async () => {
     const user = userEvent.setup();
     render(
-      <MemoryRouter initialEntries={["/"]}>
-        <BookmarksProvider repository={bookmarks}>
-          <PromptsProvider repository={prompts}>
-            <JournalProvider repository={journal}><AppShell /></JournalProvider>
-          </PromptsProvider>
-        </BookmarksProvider>
-      </MemoryRouter>,
+      <BrowserPreferenceProvider>
+        <MemoryRouter initialEntries={["/"]}>
+          <BookmarksProvider repository={bookmarks}>
+            <PromptsProvider repository={prompts}>
+              <JournalProvider repository={journal}><AppShell /></JournalProvider>
+            </PromptsProvider>
+          </BookmarksProvider>
+        </MemoryRouter>
+      </BrowserPreferenceProvider>,
     );
     await user.keyboard("{Meta>}k{/Meta}");
     expect(screen.getByRole("dialog", { name: "全局搜索" })).toBeInTheDocument();
@@ -87,13 +92,15 @@ describe("AppShell", () => {
   it("focuses the current module quick add with Command N", async () => {
     const user = userEvent.setup();
     render(
-      <MemoryRouter initialEntries={["/"]}>
-        <BookmarksProvider repository={bookmarks}>
-          <PromptsProvider repository={prompts}>
-            <JournalProvider repository={journal}><AppShell /></JournalProvider>
-          </PromptsProvider>
-        </BookmarksProvider>
-      </MemoryRouter>,
+      <BrowserPreferenceProvider>
+        <MemoryRouter initialEntries={["/"]}>
+          <BookmarksProvider repository={bookmarks}>
+            <PromptsProvider repository={prompts}>
+              <JournalProvider repository={journal}><AppShell /></JournalProvider>
+            </PromptsProvider>
+          </BookmarksProvider>
+        </MemoryRouter>
+      </BrowserPreferenceProvider>,
     );
     const todoInput = await screen.findByLabelText("新增 Todo");
     await user.keyboard("{Meta>}n{/Meta}");

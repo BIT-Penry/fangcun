@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink, Folder, Grid2X2, List, Pencil, Plus, Search, Tag, Trash2, Upload, X } from "lucide-react";
+import { Check, Clipboard, ExternalLink, Folder, FolderOpen, Layers3, LayoutGrid, Pencil, Plus, Search, Tag, Trash2, Upload, X } from "lucide-react";
 import { BookmarkEditor } from "./BookmarkEditor";
 import { parseBookmarkHtml } from "./import";
 import { useBookmarksStore } from "./BookmarksContext";
@@ -7,9 +7,92 @@ import type { Bookmark, BookmarkFolder, BookmarkImportPreview, BookmarkImportStr
 import { bookmarkHostname } from "./url";
 import { openExternalUrl } from "../../shared/openExternal";
 import { useSessionState } from "../../shared/useSessionState";
+import { useBrowserPreference } from "../../app/browser/BrowserPreferenceProvider";
+import { folderPathById } from "./folders";
+
+interface BookmarkCardProps {
+  bookmark: Bookmark;
+  folderPath: string;
+  compact?: boolean;
+  copied: boolean;
+  onOpen: (bookmark: Bookmark) => void;
+  onCopy: (bookmark: Bookmark) => void;
+  onEdit: (bookmark: Bookmark) => void;
+  onDelete: (bookmark: Bookmark) => void;
+}
+
+function BookmarkCard({ bookmark, folderPath, compact = false, copied, onOpen, onCopy, onEdit, onDelete }: BookmarkCardProps) {
+  return (
+    <article className={compact ? "bookmark-card compact" : "bookmark-card"}>
+      <div className="bookmark-card-heading">
+        {bookmark.faviconUrl ? (
+          <img className="bookmark-favicon" src={bookmark.faviconUrl} alt=""
+            onError={(event) => { event.currentTarget.style.display = "none"; }} />
+        ) : <span className="bookmark-favicon-fallback">{bookmarkHostname(bookmark.url).slice(0, 1).toUpperCase()}</span>}
+        <div className="bookmark-card-main">
+          <div className="bookmark-domain">{bookmarkHostname(bookmark.url)}</div>
+          <h2>{bookmark.title}</h2>
+        </div>
+      </div>
+      {!compact && <p className={bookmark.description ? "" : "muted"}>{bookmark.description || "暂无简介，可在编辑中补充这条资料的用途。"}</p>}
+      <span className="bookmark-url">{bookmark.url}</span>
+      <div className="bookmark-card-meta">
+        {folderPath && <span><Folder aria-hidden="true" size={13} />{folderPath}</span>}
+        {bookmark.tags.map((tag) => <span key={tag} className="bookmark-tag">{tag}</span>)}
+      </div>
+      <div className="bookmark-card-actions">
+        <button type="button" className="bookmark-action-button primary" onClick={() => onOpen(bookmark)} aria-label={`打开 ${bookmark.title}`}>
+          <ExternalLink aria-hidden="true" size={14} />打开
+        </button>
+        <button type="button" className={copied ? "bookmark-action-button copied" : "bookmark-action-button"} onClick={() => onCopy(bookmark)} aria-label={`复制 ${bookmark.title} 的链接`}>
+          {copied ? <Check aria-hidden="true" size={14} /> : <Clipboard aria-hidden="true" size={14} />}{copied ? "已复制" : "复制链接"}
+        </button>
+        <button type="button" className="icon-button" onClick={() => onEdit(bookmark)} aria-label={`编辑 ${bookmark.title}`}><Pencil aria-hidden="true" size={15} /></button>
+        <button type="button" className="icon-button danger" onClick={() => onDelete(bookmark)} aria-label={`删除 ${bookmark.title}`}><Trash2 aria-hidden="true" size={15} /></button>
+      </div>
+    </article>
+  );
+}
+
+function FolderBranch({ folder, childrenByParent, bookmarksByFolder, paths, copiedId, onOpen, onCopy, onEdit, onDelete }: {
+  folder: BookmarkFolder;
+  childrenByParent: Map<string | null, BookmarkFolder[]>;
+  bookmarksByFolder: Map<string | null, Bookmark[]>;
+  paths: Map<string, string>;
+  copiedId: string | null;
+  onOpen: (bookmark: Bookmark) => void;
+  onCopy: (bookmark: Bookmark) => void;
+  onEdit: (bookmark: Bookmark) => void;
+  onDelete: (bookmark: Bookmark) => void;
+}) {
+  const children = childrenByParent.get(folder.id) ?? [];
+  const directBookmarks = bookmarksByFolder.get(folder.id) ?? [];
+  const count = (id: string, seen = new Set<string>()): number => {
+    if (seen.has(id)) return 0;
+    const nextSeen = new Set(seen).add(id);
+    return (bookmarksByFolder.get(id)?.length ?? 0)
+      + (childrenByParent.get(id) ?? []).reduce((sum, child) => sum + count(child.id, nextSeen), 0);
+  };
+  const total = count(folder.id);
+  if (total === 0) return null;
+  return (
+    <details className="bookmark-folder-branch" open>
+      <summary><FolderOpen aria-hidden="true" size={16} /><strong>{folder.name}</strong><span>{total}</span></summary>
+      <div className="bookmark-folder-contents">
+        {directBookmarks.map((bookmark) => <BookmarkCard key={bookmark.id} bookmark={bookmark}
+          folderPath={paths.get(bookmark.folderId ?? "") ?? ""} compact copied={copiedId === bookmark.id}
+          onOpen={onOpen} onCopy={onCopy} onEdit={onEdit} onDelete={onDelete} />)}
+        {children.map((child) => <FolderBranch key={child.id} folder={child} childrenByParent={childrenByParent}
+          bookmarksByFolder={bookmarksByFolder} paths={paths} copiedId={copiedId}
+          onOpen={onOpen} onCopy={onCopy} onEdit={onEdit} onDelete={onDelete} />)}
+      </div>
+    </details>
+  );
+}
 
 export function BookmarksPage() {
   const repository = useBookmarksStore();
+  const { preference: browserPreference } = useBrowserPreference();
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [folders, setFolders] = useState<BookmarkFolder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,7 +101,9 @@ export function BookmarksPage() {
   const [folderFilter, setFolderFilter] = useSessionState("fangcun:bookmarks:folder", "");
   const [tagFilter, setTagFilter] = useSessionState("fangcun:bookmarks:tag", "");
   const [editor, setEditor] = useState<Bookmark | "new" | null>(null);
-  const [view, setView] = useSessionState<"list" | "grid">("fangcun:bookmarks:view", "list");
+  const [storedView, setView] = useSessionState<"links" | "folders">("fangcun:bookmarks:view", "links");
+  const view = storedView === "folders" ? "folders" : "links";
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [importPreview, setImportPreview] = useState<BookmarkImportPreview | null>(null);
   const [importStrategy, setImportStrategy] = useState<BookmarkImportStrategy>("skip");
   const [importing, setImporting] = useState(false);
@@ -54,6 +139,22 @@ export function BookmarksPage() {
       .sort((a, b) => a.localeCompare(b, "zh-CN")),
     [bookmarks],
   );
+  const folderPaths = useMemo(() => folderPathById(folders), [folders]);
+  const descendantFolderIds = useMemo(() => {
+    if (!folderFilter) return null;
+    const ids = new Set([folderFilter]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const folder of folders) {
+        if (folder.parentId && ids.has(folder.parentId) && !ids.has(folder.id)) {
+          ids.add(folder.id);
+          changed = true;
+        }
+      }
+    }
+    return ids;
+  }, [folderFilter, folders]);
 
   const visibleBookmarks = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase();
@@ -65,11 +166,28 @@ export function BookmarksPage() {
         bookmark.folderName ?? "",
         ...bookmark.tags,
       ].some((value) => value.toLocaleLowerCase().includes(needle));
-      const matchesFolder = !folderFilter || bookmark.folderId === folderFilter;
+      const matchesFolder = !descendantFolderIds || (bookmark.folderId ? descendantFolderIds.has(bookmark.folderId) : false);
       const matchesTag = !tagFilter || bookmark.tags.includes(tagFilter);
       return matchesSearch && matchesFolder && matchesTag;
     });
-  }, [bookmarks, folderFilter, search, tagFilter]);
+  }, [bookmarks, descendantFolderIds, search, tagFilter]);
+
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string | null, BookmarkFolder[]>();
+    const folderIds = new Set(folders.map((folder) => folder.id));
+    for (const folder of folders) {
+      const parent = folder.parentId && folderIds.has(folder.parentId) ? folder.parentId : null;
+      map.set(parent, [...(map.get(parent) ?? []), folder]);
+    }
+    return map;
+  }, [folders]);
+  const bookmarksByFolder = useMemo(() => {
+    const map = new Map<string | null, Bookmark[]>();
+    for (const bookmark of visibleBookmarks) {
+      map.set(bookmark.folderId, [...(map.get(bookmark.folderId) ?? []), bookmark]);
+    }
+    return map;
+  }, [visibleBookmarks]);
 
   const saveBookmark = async (input: BookmarkInput) => {
     if (editor !== "new" && editor) await repository.updateBookmark(editor.id, input);
@@ -85,6 +203,20 @@ export function BookmarksPage() {
       await load();
     } catch {
       setLoadError("删除书签失败，请重试");
+    }
+  };
+
+  const openBookmark = (bookmark: Bookmark) => {
+    void openExternalUrl(bookmark.url, browserPreference)
+      .catch(() => setLoadError("无法使用所选浏览器打开这个网址"));
+  };
+
+  const copyBookmark = async (bookmark: Bookmark) => {
+    try {
+      await navigator.clipboard.writeText(bookmark.url);
+      setCopiedId(bookmark.id);
+    } catch {
+      setLoadError("无法复制书签链接");
     }
   };
 
@@ -155,7 +287,7 @@ export function BookmarksPage() {
           <span className="sr-only">按文件夹筛选</span>
           <select value={folderFilter} onChange={(event) => setFolderFilter(event.target.value)}>
             <option value="">全部文件夹</option>
-            {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+            {folders.map((folder) => <option key={folder.id} value={folder.id}>{folderPaths.get(folder.id) ?? folder.name}</option>)}
           </select>
         </label>
         <label className="filter-field">
@@ -167,8 +299,8 @@ export function BookmarksPage() {
           </select>
         </label>
         <div className="view-toggle" aria-label="书签视图">
-          <button type="button" className={view === "list" ? "active" : ""} aria-label="列表视图" aria-pressed={view === "list"} onClick={() => setView("list")}><List aria-hidden="true" size={15} /></button>
-          <button type="button" className={view === "grid" ? "active" : ""} aria-label="卡片视图" aria-pressed={view === "grid"} onClick={() => setView("grid")}><Grid2X2 aria-hidden="true" size={15} /></button>
+          <button type="button" className={view === "links" ? "active" : ""} aria-label="链接卡片视图" aria-pressed={view === "links"} onClick={() => setView("links")}><LayoutGrid aria-hidden="true" size={15} /><span>链接</span></button>
+          <button type="button" className={view === "folders" ? "active" : ""} aria-label="文件夹视图" aria-pressed={view === "folders"} onClick={() => setView("folders")}><Layers3 aria-hidden="true" size={15} /><span>文件夹</span></button>
         </div>
       </div>
 
@@ -198,39 +330,29 @@ export function BookmarksPage() {
           <p>{filtering ? "换个关键词或清除筛选试试。" : "保存第一条常用网址，开始建立你的资料索引。"}</p>
           {!filtering && <button type="button" className="button-secondary" onClick={() => setEditor("new")}>添加第一条书签</button>}
         </div>
+      ) : view === "folders" ? (
+        <div className="bookmark-folder-view">
+          {(bookmarksByFolder.get(null)?.length ?? 0) > 0 && (
+            <section className="bookmark-unfiled-group">
+              <header><Folder aria-hidden="true" size={16} /><h2>未归档</h2><span>{bookmarksByFolder.get(null)?.length}</span></header>
+              <div className="bookmark-folder-items">
+                {bookmarksByFolder.get(null)?.map((bookmark) => <BookmarkCard key={bookmark.id} bookmark={bookmark}
+                  folderPath="" compact copied={copiedId === bookmark.id} onOpen={openBookmark} onCopy={(item) => void copyBookmark(item)}
+                  onEdit={setEditor} onDelete={(item) => void deleteBookmark(item)} />)}
+              </div>
+            </section>
+          )}
+          {(childrenByParent.get(null) ?? []).map((folder) => <FolderBranch key={folder.id} folder={folder}
+            childrenByParent={childrenByParent} bookmarksByFolder={bookmarksByFolder} paths={folderPaths}
+            copiedId={copiedId} onOpen={openBookmark} onCopy={(item) => void copyBookmark(item)}
+            onEdit={setEditor} onDelete={(item) => void deleteBookmark(item)} />)}
+        </div>
       ) : (
-        <div className={view === "grid" ? "bookmark-list grid-view" : "bookmark-list"}>
+        <div className="bookmark-list link-view">
           {visibleBookmarks.map((bookmark) => (
-            <article key={bookmark.id} className="bookmark-card">
-              {bookmark.faviconUrl && (
-                <img className="bookmark-favicon" src={bookmark.faviconUrl} alt=""
-                  onError={(event) => { event.currentTarget.style.display = "none"; }} />
-              )}
-              <div className="bookmark-card-main">
-                <div className="bookmark-domain">{bookmarkHostname(bookmark.url)}</div>
-                <h2>{bookmark.title}</h2>
-                {bookmark.description && <p>{bookmark.description}</p>}
-                <div className="bookmark-card-meta">
-                  {bookmark.folderName && <span><Folder aria-hidden="true" size={13} />{bookmark.folderName}</span>}
-                  {bookmark.tags.map((tag) => <span key={tag} className="bookmark-tag">{tag}</span>)}
-                </div>
-              </div>
-              <div className="bookmark-card-actions">
-                <a href={bookmark.url} className="icon-button" aria-label={`打开 ${bookmark.title}`}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    void openExternalUrl(bookmark.url).catch(() => setLoadError("无法使用默认浏览器打开这个网址"));
-                  }}>
-                  <ExternalLink aria-hidden="true" size={17} />
-                </a>
-                <button type="button" className="icon-button" onClick={() => setEditor(bookmark)} aria-label={`编辑 ${bookmark.title}`}>
-                  <Pencil aria-hidden="true" size={16} />
-                </button>
-                <button type="button" className="icon-button danger" onClick={() => void deleteBookmark(bookmark)} aria-label={`删除 ${bookmark.title}`}>
-                  <Trash2 aria-hidden="true" size={16} />
-                </button>
-              </div>
-            </article>
+            <BookmarkCard key={bookmark.id} bookmark={bookmark} folderPath={bookmark.folderId ? folderPaths.get(bookmark.folderId) ?? bookmark.folderName ?? "" : ""}
+              copied={copiedId === bookmark.id} onOpen={openBookmark} onCopy={(item) => void copyBookmark(item)}
+              onEdit={setEditor} onDelete={(item) => void deleteBookmark(item)} />
           ))}
         </div>
       )}
@@ -239,6 +361,7 @@ export function BookmarksPage() {
         <BookmarkEditor key={editor === "new" ? "new" : editor.id}
           bookmark={editor === "new" ? null : editor}
           folders={folders}
+          availableTags={tags}
           onClose={() => setEditor(null)}
           onSave={saveBookmark} />
       )}
