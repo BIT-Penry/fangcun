@@ -95,4 +95,16 @@ describe("DailyWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "设为今日状态 😊" }));
     await waitFor(() => expect(store.setEntryMood).toHaveBeenCalledWith("2026-08-21", "😊"));
   });
+
+  it("renders diary line breaks and LaTeX math in Markdown preview", async () => {
+    const user = userEvent.setup();
+    const store = createStore({ getEntry: vi.fn().mockResolvedValue("第一行\n第二行\n\n公式：$\\frac{1}{12}$") });
+    renderWorkspace(store);
+
+    await user.click(await screen.findByRole("button", { name: "预览" }));
+    const preview = screen.getByLabelText("Markdown 预览");
+
+    expect(preview.querySelector("br")).not.toBeNull();
+    expect(preview.querySelector(".katex")).not.toBeNull();
+  });
 });

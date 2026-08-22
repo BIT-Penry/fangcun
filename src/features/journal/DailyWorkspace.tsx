@@ -3,7 +3,11 @@ import {
   Check, Clock3, Flag, GripVertical, ListPlus, Plus, SmilePlus, SlidersHorizontal, Trash2,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import rehypeKatex from "rehype-katex";
+import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import "katex/dist/katex.min.css";
 import { addLocalDays, formatLocalDate, localDateKey } from "../../shared/date";
 import { openExternalUrl } from "../../shared/openExternal";
 import { EmojiPicker } from "./EmojiPicker";
@@ -399,7 +403,7 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
             ) : (
               <div className="markdown-preview" aria-label="Markdown 预览">
                 {entry.trim() ? (
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[rehypeKatex]} components={{
                     a: ({ href, children }) => <a href={href} onClick={(event) => { event.preventDefault(); openMarkdownLink(href); }}>{children}</a>,
                   }}>{entry}</ReactMarkdown>
                 ) : <p className="markdown-empty">还没有内容，切换到编辑开始书写。</p>}
