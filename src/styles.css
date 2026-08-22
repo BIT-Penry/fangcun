@@ -198,8 +198,8 @@ button, input, textarea, select { font: inherit; }
 .favorite-field svg { color: var(--accent); }
 .prompt-notes { margin-top: 14px; }
 
-.home-page,
-.journal-page { max-width: 1180px; margin: 0 auto; }
+.home-page { max-width: 1180px; margin: 0 auto; }
+.journal-page { display: flex; width: 100%; min-height: 100%; max-width: 1480px; flex-direction: column; margin: 0 auto; }
 .home-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
 .home-header-actions { display: flex; align-items: center; gap: 18px; }
 .home-header h1,
@@ -207,7 +207,7 @@ button, input, textarea, select { font: inherit; }
 .journal-link { display: inline-flex; align-items: center; gap: 7px; color: var(--accent); font-size: 12px; font-weight: 650; text-decoration: none; }
 .journal-link:hover { text-decoration: underline; }
 .date-navigation { display: flex; align-items: center; gap: 4px; }
-.journal-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; margin-top: 30px; }
+.journal-layout { display: grid; min-height: 0; flex: 1; grid-template-columns: clamp(200px, 15vw, 240px) minmax(0, 1fr); gap: 16px; margin-top: 30px; }
 .calendar-panel { align-self: start; border: 1px solid var(--border); border-radius: 13px; padding: 10px; background: var(--surface); }
 .calendar-heading { display: flex; align-items: center; justify-content: space-between; padding: 2px 0 7px; }
 .calendar-heading strong { font-size: 12px; }
@@ -219,9 +219,9 @@ button, input, textarea, select { font: inherit; }
 .calendar-day.today { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, var(--border)); color: var(--accent); }
 .calendar-day.selected { background: var(--selected); color: var(--selected-text); box-shadow: none; }
 .calendar-selected-date { margin: 10px 4px 2px; border-top: 1px solid var(--border); padding-top: 10px; color: color-mix(in srgb, var(--text) 55%, transparent); font-size: 10px; line-height: 1.5; }
-.daily-workspace { min-width: 0; }
+.daily-workspace { display: flex; min-width: 0; flex-direction: column; }
 .home-page .daily-workspace { margin-top: 30px; }
-.daily-columns { display: grid; min-height: 520px; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); overflow: hidden; border: 1px solid var(--border); border-radius: 14px; }
+.daily-columns { display: grid; min-height: 520px; flex: 1; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); overflow: hidden; border: 1px solid var(--border); border-radius: 14px; }
 .todo-panel,
 .entry-panel { min-width: 0; padding: 20px; }
 .todo-panel { border-right: 1px solid var(--border); background: color-mix(in srgb, var(--surface-muted) 30%, var(--surface)); }
@@ -372,24 +372,32 @@ button, input, textarea, select { font: inherit; }
   .bookmark-toolbar { grid-template-columns: 1fr 1fr auto; }
   .search-field { grid-column: 1 / -1; }
   .prompt-workspace { grid-template-columns: 250px minmax(0, 1fr); }
-  .journal-layout { grid-template-columns: 190px minmax(0, 1fr); }
+}
+
+@media (max-width: 1100px) {
+  .app-shell { grid-template-columns: 72px 1fr; }
+  .app-brand, .nav-link span { display: none; }
+  .nav-search-button kbd { display: none; }
+  .nav-link { justify-content: center; }
+}
+
+@media (max-width: 960px) {
+  .journal-layout { grid-template-columns: minmax(0, 1fr); }
+  .calendar-panel { display: none; }
+}
+
+@media (max-width: 760px) {
   .daily-columns { grid-template-columns: 1fr; }
   .todo-panel { border-right: 0; border-bottom: 1px solid var(--border); }
 }
 
 @media (max-width: 680px) {
-  .app-shell { grid-template-columns: 72px 1fr; }
-  .app-brand, .nav-link span { display: none; }
-  .nav-search-button kbd { display: none; }
-  .nav-link { justify-content: center; }
   .bookmarks-header { align-items: flex-end; }
   .page-description { display: none; }
   .bookmark-toolbar, .bookmark-form-grid { grid-template-columns: 1fr; }
   .search-field { grid-column: auto; }
   .prompt-workspace { grid-template-columns: 1fr; }
   .prompt-library { max-height: 230px; border-right: 0; border-bottom: 1px solid var(--border); }
-  .journal-layout { grid-template-columns: 1fr; }
-  .calendar-panel { display: none; }
   .todo-details-editor { grid-template-columns: 1fr; }
   .emoji-grid { grid-template-columns: repeat(8, minmax(24px, 1fr)); }
   .bookmark-list.grid-view { grid-template-columns: 1fr; }
