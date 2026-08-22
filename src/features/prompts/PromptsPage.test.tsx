@@ -54,6 +54,41 @@ describe("PromptsPage", () => {
     expect(screen.queryByText("把好用的表达留下来")).not.toBeInTheDocument();
   });
 
+  it("reuses existing tags and creates new tags", async () => {
+    const user = userEvent.setup();
+    const writingPrompt = { ...prompt, id: "prompt-2", title: "写作助手", tags: ["写作"], isFavorite: false };
+    const store = createStore({ listPrompts: vi.fn().mockResolvedValue([prompt, writingPrompt]) });
+    renderPage(store);
+
+    await user.click(await screen.findByRole("button", { name: /论文摘要/ }));
+    const dialog = screen.getByRole("dialog", { name: "编辑提示词" });
+    const tagInput = within(dialog).getByRole("textbox", { name: "搜索或新建标签" });
+    await user.click(tagInput);
+    await user.click(within(dialog).getByRole("option", { name: "写作" }));
+    await user.type(tagInput, "灵感");
+    await user.click(within(dialog).getByRole("button", { name: "创建“灵感”" }));
+    window.dispatchEvent(new Event("blur"));
+
+    await waitFor(() => expect(store.updatePrompt).toHaveBeenCalledWith("prompt-1", expect.objectContaining({
+      tags: ["研究", "写作", "灵感"],
+    })), { timeout: 2000 });
+    expect(within(dialog).getByRole("button", { name: "移除标签 灵感" })).toBeInTheDocument();
+  });
+
+  it("copies the prompt body with one click", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    renderPage(createStore());
+
+    await user.click(await screen.findByRole("button", { name: /论文摘要/ }));
+    const dialog = screen.getByRole("dialog", { name: "编辑提示词" });
+    await user.click(within(dialog).getByRole("button", { name: "复制正文" }));
+
+    expect(writeText).toHaveBeenCalledWith("Summarize the following paper.");
+    expect(within(dialog).getByRole("button", { name: "已复制" })).toBeInTheDocument();
+  });
+
   it("creates a prompt after the autosave delay", async () => {
     const user = userEvent.setup();
     const store = createStore({ listPrompts: vi.fn().mockResolvedValue([]) });

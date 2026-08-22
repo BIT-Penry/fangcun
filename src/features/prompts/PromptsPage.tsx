@@ -21,11 +21,18 @@ function toDraft(prompt: Prompt): PromptDraft {
   };
 }
 
+function parseTags(value: string) {
+  return [...new Set(value.split(",").map((tag) => tag.trim()).filter(Boolean))];
+}
+
 export function PromptsPage() {
   const repository = usePromptsStore();
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [draft, setDraft] = useState<PromptDraft | null>(null);
   const [tagsText, setTagsText] = useState("");
+  const [tagQuery, setTagQuery] = useState("");
+  const [tagPickerOpen, setTagPickerOpen] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
   const [search, setSearch] = useSessionState("fangcun:prompts:search", "");
   const [tagFilter, setTagFilter] = useSessionState("fangcun:prompts:tag", "");
   const [favoriteOnly, setFavoriteOnly] = useSessionState("fangcun:prompts:favorites", false);
@@ -59,6 +66,9 @@ export function PromptsPage() {
   const selectPrompt = (prompt: Prompt) => {
     setDraft(toDraft(prompt));
     setTagsText(prompt.tags.join(", "));
+    setTagQuery("");
+    setTagPickerOpen(false);
+    setCopyStatus("idle");
     setDirty(false);
     setSaveStatus("idle");
   };
@@ -66,6 +76,9 @@ export function PromptsPage() {
   const startNewPrompt = useCallback(() => {
     setDraft({ ...EMPTY_DRAFT });
     setTagsText("");
+    setTagQuery("");
+    setTagPickerOpen(false);
+    setCopyStatus("idle");
     setDirty(false);
     setSaveStatus("idle");
   }, []);
@@ -80,6 +93,7 @@ export function PromptsPage() {
     setDraft((current) => current ? { ...current, ...patch } : current);
     setDirty(true);
     setSaveStatus("idle");
+    if ("content" in patch) setCopyStatus("idle");
     if (savingRef.current) pendingFlush.current = true;
   };
 
@@ -92,7 +106,7 @@ export function PromptsPage() {
     }
     const snapshot = {
       ...current,
-      tags: latestTagsText.current.split(",").map((tag) => tag.trim()).filter(Boolean),
+      tags: parseTags(latestTagsText.current),
     };
     const savedRevision = revision.current;
     savingRef.current = true;
@@ -163,10 +177,42 @@ export function PromptsPage() {
     return untagged.length > 0 ? [...tagged, { name: "未分类", prompts: untagged }] : tagged;
   }, [allTags, tagFilter, visiblePrompts]);
   const filtering = Boolean(search || tagFilter || favoriteOnly);
+  const selectedTags = useMemo(() => parseTags(tagsText), [tagsText]);
+  const matchingTags = useMemo(() => {
+    const needle = tagQuery.trim().toLocaleLowerCase();
+    return allTags.filter((tag) => !needle || tag.toLocaleLowerCase().includes(needle));
+  }, [allTags, tagQuery]);
+
+  const updateTags = (nextTags: string[]) => {
+    revision.current += 1;
+    setTagsText([...new Set(nextTags)].join(", "));
+    setDirty(true);
+    setSaveStatus("idle");
+    if (savingRef.current) pendingFlush.current = true;
+  };
+
+  const addTag = (value: string) => {
+    const normalized = value.trim();
+    if (!normalized) return;
+    const existing = [...allTags, ...selectedTags]
+      .find((tag) => tag.toLocaleLowerCase() === normalized.toLocaleLowerCase());
+    const tag = existing ?? normalized;
+    if (!selectedTags.includes(tag)) updateTags([...selectedTags, tag]);
+    setTagQuery("");
+    setTagPickerOpen(true);
+  };
+
+  const toggleTag = (tag: string) => {
+    updateTags(selectedTags.includes(tag) ? selectedTags.filter((value) => value !== tag) : [...selectedTags, tag]);
+  };
 
   const copyPrompt = async (prompt: Prompt | PromptDraft) => {
-    await navigator.clipboard.writeText(prompt.content);
-    setSaveStatus("saved");
+    try {
+      await navigator.clipboard.writeText(prompt.content);
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("error");
+    }
   };
 
   const deletePrompt = async () => {
@@ -186,6 +232,9 @@ export function PromptsPage() {
     void flushPrompt();
     setDraft(null);
     setTagsText("");
+    setTagQuery("");
+    setTagPickerOpen(false);
+    setCopyStatus("idle");
     setDirty(false);
     setSaveStatus("idle");
   }, [flushPrompt]);
@@ -193,11 +242,17 @@ export function PromptsPage() {
   useEffect(() => {
     if (!draft) return;
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeEditor();
+      if (event.key !== "Escape") return;
+      if (tagPickerOpen) {
+        setTagPickerOpen(false);
+        setTagQuery("");
+        return;
+      }
+      closeEditor();
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [closeEditor, draft]);
+  }, [closeEditor, draft, tagPickerOpen]);
 
   return (
     <section className="prompts-page">
@@ -283,8 +338,11 @@ export function PromptsPage() {
                   {saveStatus === "idle" && (draft.id ? "修改后自动保存" : "输入正文后自动保存")}
                 </span>
                 <div>
-                  <button type="button" className="icon-button" disabled={!draft.content}
-                    onClick={() => void copyPrompt(draft)} aria-label="复制提示词正文"><Clipboard aria-hidden="true" size={16} /></button>
+                  <button type="button" className={`prompt-copy-button ${copyStatus}`} disabled={!draft.content}
+                    onClick={() => void copyPrompt(draft)}>
+                    {copyStatus === "copied" ? <Check aria-hidden="true" size={15} /> : <Clipboard aria-hidden="true" size={15} />}
+                    {copyStatus === "copied" ? "已复制" : copyStatus === "error" ? "复制失败" : "复制正文"}
+                  </button>
                   <button type="button" className="icon-button danger" disabled={!draft.id}
                     onClick={() => void deletePrompt()} aria-label="删除提示词"><Trash2 aria-hidden="true" size={16} /></button>
                 </div>
@@ -294,15 +352,32 @@ export function PromptsPage() {
               <textarea className="prompt-content-input" aria-label="提示词正文" value={draft.content}
                 placeholder="在这里写下提示词正文…" onChange={(event) => changeDraft({ content: event.target.value })} />
               <div className="prompt-detail-grid">
-                <label className="field-label">标签 <span>逗号分隔</span>
-                  <input value={tagsText} placeholder="写作, 研究" onChange={(event) => {
-                    revision.current += 1;
-                    setTagsText(event.target.value);
-                    setDirty(true);
-                    setSaveStatus("idle");
-                    if (savingRef.current) pendingFlush.current = true;
-                  }} />
-                </label>
+                <div className="field-label">标签 <span>选择已有标签，或输入名称创建</span>
+                  <div className="tag-combobox" onBlur={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setTagPickerOpen(false);
+                  }}>
+                    {selectedTags.length > 0 && <div className="selected-tag-list">
+                      {selectedTags.map((tag) => <span key={tag}>{tag}<button type="button" aria-label={`移除标签 ${tag}`} onClick={() => toggleTag(tag)}><X aria-hidden="true" size={11} /></button></span>)}
+                    </div>}
+                    <div className="tag-combobox-input">
+                      <Search aria-hidden="true" size={14} />
+                      <input aria-label="搜索或新建标签" value={tagQuery} placeholder="搜索或新建标签"
+                        aria-expanded={tagPickerOpen} aria-controls="prompt-tag-options"
+                        onFocus={() => setTagPickerOpen(true)} onChange={(event) => { setTagQuery(event.target.value); setTagPickerOpen(true); }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") { event.preventDefault(); addTag(tagQuery); }
+                        }} />
+                    </div>
+                    {tagPickerOpen && <div id="prompt-tag-options" className="tag-options" role="listbox" aria-label="可用标签" aria-multiselectable="true">
+                      {matchingTags.map((tag) => <button key={tag} type="button" role="option" aria-selected={selectedTags.includes(tag)} onClick={() => toggleTag(tag)}>
+                        <span className="tag-option-check">{selectedTags.includes(tag) && <Check aria-hidden="true" size={12} />}</span>{tag}
+                      </button>)}
+                      {tagQuery.trim() && !allTags.some((tag) => tag.toLocaleLowerCase() === tagQuery.trim().toLocaleLowerCase()) &&
+                        <button type="button" className="create-tag-option" onClick={() => addTag(tagQuery)}><Plus aria-hidden="true" size={13} />创建“{tagQuery.trim()}”</button>}
+                      {matchingTags.length === 0 && !tagQuery.trim() && <p>还没有可复用的标签</p>}
+                    </div>}
+                  </div>
+                </div>
                 <label className="favorite-field">
                   <input type="checkbox" checked={draft.isFavorite} onChange={(event) => changeDraft({ isFavorite: event.target.checked })} />
                   <Star aria-hidden="true" size={15} />收藏这条提示词

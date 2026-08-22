@@ -191,10 +191,15 @@ button, input, textarea, select { font: inherit; }
 .prompt-editor-dialog { width: min(760px, 100%); }
 .prompt-editor-form { display: flex; min-height: 500px; flex-direction: column; padding: 18px 24px 24px; box-sizing: border-box; }
 .prompt-editor-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.prompt-editor-topbar > div { display: flex; gap: 2px; }
+.prompt-editor-topbar > div { display: flex; align-items: center; gap: 5px; }
 .save-status { display: inline-flex; align-items: center; gap: 5px; color: color-mix(in srgb, var(--text) 43%, transparent); font-size: 11px; }
 .save-status.error { color: var(--danger); }
 .save-status.saved { color: var(--accent); }
+.prompt-copy-button { display: inline-flex; min-height: 32px; align-items: center; gap: 6px; border: 1px solid var(--text); border-radius: 8px; background: var(--text); padding: 0 11px; color: var(--surface); cursor: pointer; font-size: 11px; font-weight: 650; transition: opacity 150ms ease, background 150ms ease; }
+.prompt-copy-button:hover { opacity: 0.82; }
+.prompt-copy-button:disabled { border-color: var(--border); background: var(--surface-muted); color: color-mix(in srgb, var(--text) 35%, transparent); cursor: not-allowed; opacity: 1; }
+.prompt-copy-button.copied { border-color: var(--accent); background: var(--accent); }
+.prompt-copy-button.error { border-color: var(--danger); background: var(--danger); }
 .prompt-title-input,
 .prompt-content-input { width: 100%; box-sizing: border-box; border: 0; outline: 0; background: transparent; color: var(--text); }
 .prompt-title-input { padding: 9px 0 12px; font-size: 24px; font-weight: 650; letter-spacing: -0.03em; }
@@ -204,6 +209,21 @@ button, input, textarea, select { font: inherit; }
 .favorite-field input { accent-color: var(--accent); }
 .favorite-field svg { color: var(--accent); }
 .prompt-notes { margin-top: 14px; }
+.tag-combobox { position: relative; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); padding: 5px; }
+.tag-combobox:focus-within { border-color: color-mix(in srgb, var(--text) 56%, var(--border)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 8%, transparent); }
+.selected-tag-list { display: flex; flex-wrap: wrap; gap: 5px; padding: 2px 2px 4px; }
+.selected-tag-list > span { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 9%, var(--surface-muted)); padding: 5px 6px 5px 8px; color: color-mix(in srgb, var(--accent) 84%, var(--text)); font-size: 10px; font-weight: 600; }
+.selected-tag-list button { display: grid; width: 16px; height: 16px; place-items: center; border: 0; border-radius: 50%; background: transparent; padding: 0; color: inherit; cursor: pointer; }
+.selected-tag-list button:hover { background: color-mix(in srgb, var(--accent) 13%, transparent); }
+.tag-combobox-input { display: flex; align-items: center; gap: 7px; padding: 0 5px; color: color-mix(in srgb, var(--text) 42%, transparent); }
+.field-label .tag-combobox-input input { min-width: 0; border: 0; background: transparent; padding: 6px 0; box-shadow: none; }
+.tag-options { position: absolute; z-index: 4; top: calc(100% + 6px); right: 0; left: 0; display: grid; max-height: 190px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 5px; box-shadow: 0 14px 34px rgb(0 0 0 / 13%); }
+.tag-options button { display: flex; min-height: 33px; align-items: center; gap: 8px; border: 0; border-radius: 7px; background: transparent; padding: 0 9px; color: var(--text); cursor: pointer; text-align: left; font-size: 11px; }
+.tag-options button:hover,
+.tag-options button[aria-selected="true"] { background: var(--surface-muted); }
+.tag-option-check { display: grid; width: 16px; height: 16px; flex: none; place-items: center; border: 1px solid var(--border); border-radius: 5px; color: var(--accent); }
+.tag-options .create-tag-option { border-top: 1px solid var(--border); border-radius: 0 0 7px 7px; color: var(--accent); font-weight: 600; }
+.tag-options p { margin: 10px; color: color-mix(in srgb, var(--text) 45%, transparent); font-size: 11px; font-weight: 400; }
 
 .home-page { max-width: 1180px; margin: 0 auto; }
 .journal-page { display: flex; width: 100%; min-height: 100%; max-width: 1480px; flex-direction: column; margin: 0 auto; }
