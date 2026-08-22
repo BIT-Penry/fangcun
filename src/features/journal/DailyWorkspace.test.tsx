@@ -96,15 +96,31 @@ describe("DailyWorkspace", () => {
     await waitFor(() => expect(store.setEntryMood).toHaveBeenCalledWith("2026-08-21", "😊"));
   });
 
-  it("renders diary line breaks and LaTeX math in Markdown preview", async () => {
+  it("renders lists, line breaks, and inline and display math in Markdown preview", async () => {
     const user = userEvent.setup();
-    const store = createStore({ getEntry: vi.fn().mockResolvedValue("第一行\n第二行\n\n公式：$\\frac{1}{12}$") });
+    const store = createStore({ getEntry: vi.fn().mockResolvedValue([
+      "第一行",
+      "第二行",
+      "",
+      "- 无序列表",
+      "",
+      "1. 有序列表",
+      "",
+      "行内公式：$\\frac{1}{12}$",
+      "",
+      "$$",
+      "\\frac{1}{2}",
+      "$$",
+    ].join("\n")) });
     renderWorkspace(store);
 
     await user.click(await screen.findByRole("button", { name: "预览" }));
     const preview = screen.getByLabelText("Markdown 预览");
 
     expect(preview.querySelector("br")).not.toBeNull();
-    expect(preview.querySelector(".katex")).not.toBeNull();
+    expect(preview.querySelector("ul > li")?.textContent).toContain("无序列表");
+    expect(preview.querySelector("ol > li")?.textContent).toContain("有序列表");
+    expect(preview.querySelectorAll(".katex")).toHaveLength(2);
+    expect(preview.querySelectorAll(".katex-display")).toHaveLength(1);
   });
 });
