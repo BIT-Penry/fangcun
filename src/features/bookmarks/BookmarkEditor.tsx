@@ -58,7 +58,7 @@ export function BookmarkEditor({
 
     lastFetchedUrl.current = normalizedUrl;
     setMetadataStatus("loading");
-    setMetadataMessage(useAi ? "正在读取网页并交给 DeepSeek 整理…" : "正在读取网页信息…");
+    setMetadataMessage(useAi ? "正在读取网页并交给 AI 整理…" : "正在读取网页信息…");
     try {
       const metadata = await (useAi ? aiMetadataLoader(normalizedUrl) : metadataLoader(normalizedUrl));
       setInput((current) => {
@@ -79,7 +79,7 @@ export function BookmarkEditor({
         setMetadataMessage(metadata.warning);
       } else if (metadata.title || metadata.description || metadata.faviconUrl) {
         setMetadataStatus("success");
-        setMetadataMessage(metadata.aiEnhanced ? "DeepSeek 已生成标题与简介，可继续修改" : "已读取网页原始信息");
+        setMetadataMessage(metadata.aiEnhanced ? "AI 已生成标题与简介，可继续修改" : "已读取网页原始信息");
       } else {
         setMetadataStatus("error");
         setMetadataMessage("网页没有提供可用信息，仍可手动填写");

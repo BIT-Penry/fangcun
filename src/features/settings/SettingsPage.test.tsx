@@ -7,12 +7,18 @@ import { BackupProvider } from "./BackupContext";
 import type { BackupService } from "./BackupService";
 import { SettingsPage } from "./SettingsPage";
 import { BrowserPreferenceProvider } from "../../app/browser/BrowserPreferenceProvider";
-import { getDeepSeekStatus, saveDeepSeekApiKey } from "../../shared/deepseek";
+import { getAiServiceConfig, saveAiServiceConfig } from "../../shared/aiService";
 
-vi.mock("../../shared/deepseek", () => ({
-  getDeepSeekStatus: vi.fn().mockResolvedValue({ configured: false }),
-  saveDeepSeekApiKey: vi.fn().mockResolvedValue(undefined),
-  deleteDeepSeekApiKey: vi.fn().mockResolvedValue(undefined),
+vi.mock("../../shared/aiService", () => ({
+  getAiServiceConfig: vi.fn().mockResolvedValue({
+    configured: false,
+    provider: "deepseek",
+    displayName: "DeepSeek",
+    baseUrl: "https://api.deepseek.com",
+    model: "deepseek-v4-flash",
+  }),
+  saveAiServiceConfig: vi.fn().mockResolvedValue(undefined),
+  deleteAiServiceConfig: vi.fn().mockResolvedValue(undefined),
 }));
 
 function deferred<T>() {
@@ -65,7 +71,7 @@ describe("SettingsPage", () => {
     await user.click(screen.getByRole("radio", { name: "深色" }));
     expect(save).toHaveBeenCalledWith("dark");
     expect(screen.getByText("保存中…")).toBeInTheDocument();
-    for (const radio of screen.getAllByRole("radio")) expect(radio).toBeDisabled();
+    for (const name of ["跟随系统", "浅色", "深色"]) expect(screen.getByRole("radio", { name })).toBeDisabled();
     await user.click(screen.getByRole("radio", { name: "浅色" }));
     expect(save).toHaveBeenCalledOnce();
     write.resolve();
@@ -115,17 +121,52 @@ describe("SettingsPage", () => {
     await waitFor(() => expect(screen.getByRole("combobox", { name: "默认浏览器" })).toHaveValue("chrome"));
   });
 
-  it("validates and saves the DeepSeek API key from settings", async () => {
+  it("switches provider and saves its model and API key", async () => {
     const user = userEvent.setup();
-    vi.mocked(getDeepSeekStatus).mockResolvedValueOnce({ configured: false });
-    vi.mocked(saveDeepSeekApiKey).mockResolvedValueOnce(undefined);
+    vi.mocked(getAiServiceConfig).mockResolvedValueOnce({
+      configured: false,
+      provider: "deepseek",
+      displayName: "DeepSeek",
+      baseUrl: "https://api.deepseek.com",
+      model: "deepseek-v4-flash",
+    });
+    vi.mocked(saveAiServiceConfig).mockResolvedValueOnce(undefined);
     renderSettings(vi.fn().mockResolvedValue(undefined));
 
-    expect(await screen.findByText("尚未配置 DeepSeek API Key")).toBeInTheDocument();
-    await user.type(screen.getByLabelText("DeepSeek API Key"), "sk-test-key-123");
-    await user.click(screen.getByRole("button", { name: "验证并保存" }));
+    expect(await screen.findByText("尚未配置 AI 服务")).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: /Kimi/ }));
+    expect(screen.getByLabelText("模型")).toHaveValue("kimi-k3");
+    await user.type(screen.getByLabelText("API Key"), "sk-kimi-test-123");
+    await user.click(screen.getByRole("button", { name: "验证并启用" }));
 
-    await waitFor(() => expect(saveDeepSeekApiKey).toHaveBeenCalledWith("sk-test-key-123"));
-    expect(screen.getByText("连接成功，API Key 已保存到 macOS 钥匙串")).toBeInTheDocument();
+    await waitFor(() => expect(saveAiServiceConfig).toHaveBeenCalledWith({
+      provider: "kimi",
+      displayName: "Kimi",
+      baseUrl: "https://api.moonshot.cn/v1",
+      model: "kimi-k3",
+      apiKey: "sk-kimi-test-123",
+    }));
+    expect(screen.getByText("连接成功，已启用 Kimi")).toBeInTheDocument();
+  });
+
+  it("supports a custom OpenAI-compatible service", async () => {
+    const user = userEvent.setup();
+    renderSettings(vi.fn().mockResolvedValue(undefined));
+
+    await screen.findByText("尚未配置 AI 服务");
+    await user.click(screen.getByRole("radio", { name: /自定义/ }));
+    await user.type(screen.getByLabelText("服务名称"), "本地网关");
+    await user.type(screen.getByLabelText("Base URL"), "http://127.0.0.1:11434/v1");
+    await user.type(screen.getByLabelText("模型"), "qwen-local");
+    await user.type(screen.getByLabelText("API Key"), "local-test-key");
+    await user.click(screen.getByRole("button", { name: "验证并启用" }));
+
+    await waitFor(() => expect(saveAiServiceConfig).toHaveBeenCalledWith({
+      provider: "custom",
+      displayName: "本地网关",
+      baseUrl: "http://127.0.0.1:11434/v1",
+      model: "qwen-local",
+      apiKey: "local-test-key",
+    }));
   });
 });

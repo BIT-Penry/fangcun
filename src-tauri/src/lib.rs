@@ -1,6 +1,6 @@
+mod ai_service;
 mod bookmark_metadata;
 mod database;
-mod deepseek;
 mod external_browser;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -13,9 +13,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             bookmark_metadata::fetch_bookmark_metadata,
             bookmark_metadata::fetch_ai_bookmark_metadata,
-            deepseek::get_deepseek_status,
-            deepseek::save_deepseek_api_key,
-            deepseek::delete_deepseek_api_key,
+            ai_service::get_ai_service_config,
+            ai_service::save_ai_service_config,
+            ai_service::delete_ai_service_config,
             external_browser::open_url_with_browser
         ])
         .run(tauri::generate_context!())

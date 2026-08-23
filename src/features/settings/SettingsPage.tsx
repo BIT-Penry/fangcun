@@ -7,7 +7,7 @@ import type { ThemePreference } from "../../app/theme/theme";
 import { useBackupService } from "./BackupContext";
 import { openExternalUrl } from "../../shared/openExternal";
 import type { BrowserPreference } from "../../shared/openExternal";
-import { deleteDeepSeekApiKey, getDeepSeekStatus, saveDeepSeekApiKey } from "../../shared/deepseek";
+import { deleteAiServiceConfig, getAiServiceConfig, saveAiServiceConfig, type AiProviderId, type AiServiceConfig } from "../../shared/aiService";
 
 const OPTIONS: readonly { value: ThemePreference; label: string; icon: typeof Monitor }[] = [
   { value: "system", label: "跟随系统", icon: Monitor },
@@ -23,6 +23,19 @@ const BROWSER_OPTIONS: readonly { value: BrowserPreference; label: string }[] = 
   { value: "firefox", label: "Firefox" },
 ];
 
+const AI_PROVIDER_OPTIONS: readonly {
+  value: AiProviderId;
+  label: string;
+  description: string;
+  baseUrl: string;
+  model: string;
+}[] = [
+  { value: "deepseek", label: "DeepSeek", description: "中文整理，性价比较高", baseUrl: "https://api.deepseek.com", model: "deepseek-v4-flash" },
+  { value: "kimi", label: "Kimi", description: "长文本与中文内容", baseUrl: "https://api.moonshot.cn/v1", model: "kimi-k3" },
+  { value: "openai", label: "OpenAI / GPT", description: "通用理解与稳定输出", baseUrl: "https://api.openai.com/v1", model: "gpt-5.6" },
+  { value: "custom", label: "自定义", description: "OpenAI 兼容接口", baseUrl: "", model: "" },
+];
+
 export function SettingsPage() {
   const { preference, setPreference, saveStatus } = useTheme();
   const { preference: browserPreference, setPreference: setBrowserPreference, saveStatus: browserSaveStatus } = useBrowserPreference();
@@ -30,52 +43,76 @@ export function SettingsPage() {
   const [appInfo, setAppInfo] = useState<{ version: string; dataLocation: string } | null>(null);
   const [backupStatus, setBackupStatus] = useState<"idle" | "working" | "success" | "error">("idle");
   const [backupMessage, setBackupMessage] = useState("");
-  const [deepSeekKey, setDeepSeekKey] = useState("");
-  const [deepSeekConfigured, setDeepSeekConfigured] = useState(false);
-  const [deepSeekStatus, setDeepSeekStatus] = useState<"loading" | "idle" | "saving" | "saved" | "error">("loading");
-  const [deepSeekMessage, setDeepSeekMessage] = useState("正在检查钥匙串…");
+  const [aiProvider, setAiProvider] = useState<AiProviderId>("deepseek");
+  const [aiDisplayName, setAiDisplayName] = useState("DeepSeek");
+  const [aiBaseUrl, setAiBaseUrl] = useState("https://api.deepseek.com");
+  const [aiModel, setAiModel] = useState("deepseek-v4-flash");
+  const [aiKey, setAiKey] = useState("");
+  const [savedAiConfig, setSavedAiConfig] = useState<AiServiceConfig | null>(null);
+  const [aiStatus, setAiStatus] = useState<"loading" | "idle" | "saving" | "saved" | "error">("loading");
+  const [aiMessage, setAiMessage] = useState("正在检查钥匙串…");
 
   useEffect(() => {
     void backupService.getAppInfo().then(setAppInfo).catch(() => setAppInfo(null));
-    void getDeepSeekStatus()
-      .then(({ configured }) => {
-        setDeepSeekConfigured(configured);
-        setDeepSeekStatus("idle");
-        setDeepSeekMessage(configured ? "API Key 已安全保存在 macOS 钥匙串" : "尚未配置 DeepSeek API Key");
+    void getAiServiceConfig()
+      .then((config) => {
+        setSavedAiConfig(config);
+        setAiProvider(config.provider);
+        setAiDisplayName(config.displayName);
+        setAiBaseUrl(config.baseUrl);
+        setAiModel(config.model);
+        setAiStatus("idle");
+        setAiMessage(config.configured ? `${config.displayName} 已启用，API Key 保存在 macOS 钥匙串` : "尚未配置 AI 服务");
       })
       .catch(() => {
-        setDeepSeekStatus("error");
-        setDeepSeekMessage("无法读取 macOS 钥匙串");
+        setAiStatus("error");
+        setAiMessage("无法读取 macOS 钥匙串");
       });
   }, [backupService]);
 
-  const saveDeepSeekKey = async () => {
-    setDeepSeekStatus("saving");
-    setDeepSeekMessage("正在验证 DeepSeek 连接…");
+  const selectAiProvider = (provider: AiProviderId) => {
+    const option = AI_PROVIDER_OPTIONS.find((candidate) => candidate.value === provider)!;
+    const saved = savedAiConfig?.configured && savedAiConfig.provider === provider ? savedAiConfig : null;
+    setAiProvider(provider);
+    setAiDisplayName(saved?.displayName ?? (provider === "custom" ? "" : option.label.replace(" / GPT", "")));
+    setAiBaseUrl(saved?.baseUrl ?? option.baseUrl);
+    setAiModel(saved?.model ?? option.model);
+    setAiKey("");
+    setAiStatus("idle");
+    setAiMessage(savedAiConfig?.configured && savedAiConfig.provider === provider
+      ? `${savedAiConfig.displayName} 已保存；可修改模型后重新验证`
+      : "输入该服务的 API Key 后验证并启用");
+  };
+
+  const saveAiService = async () => {
+    setAiStatus("saving");
+    setAiMessage(`正在验证${aiDisplayName || "自定义服务"}连接…`);
     try {
-      await saveDeepSeekApiKey(deepSeekKey);
-      setDeepSeekConfigured(true);
-      setDeepSeekKey("");
-      setDeepSeekStatus("saved");
-      setDeepSeekMessage("连接成功，API Key 已保存到 macOS 钥匙串");
+      await saveAiServiceConfig({ provider: aiProvider, displayName: aiDisplayName, baseUrl: aiBaseUrl, model: aiModel, apiKey: aiKey });
+      const displayName = aiProvider === "custom" ? aiDisplayName.trim() : AI_PROVIDER_OPTIONS.find((option) => option.value === aiProvider)!.label.replace(" / GPT", "");
+      const config = { configured: true, provider: aiProvider, displayName, baseUrl: aiBaseUrl.trim().replace(/\/$/, ""), model: aiModel.trim() };
+      setSavedAiConfig(config);
+      setAiKey("");
+      setAiStatus("saved");
+      setAiMessage(`连接成功，已启用 ${displayName}`);
     } catch (error) {
-      setDeepSeekStatus("error");
-      setDeepSeekMessage(error instanceof Error ? error.message : String(error));
+      setAiStatus("error");
+      setAiMessage(error instanceof Error ? error.message : String(error));
     }
   };
 
-  const removeDeepSeekKey = async () => {
-    if (!window.confirm("删除已保存的 DeepSeek API Key？之后将无法使用 AI 获取网页信息。")) return;
-    setDeepSeekStatus("saving");
-    setDeepSeekMessage("正在删除 API Key…");
+  const removeAiService = async () => {
+    if (!window.confirm("删除已保存的 AI 服务和 API Key？之后将无法使用 AI 获取网页信息。")) return;
+    setAiStatus("saving");
+    setAiMessage("正在删除 AI 配置…");
     try {
-      await deleteDeepSeekApiKey();
-      setDeepSeekConfigured(false);
-      setDeepSeekStatus("idle");
-      setDeepSeekMessage("已从 macOS 钥匙串删除 API Key");
+      await deleteAiServiceConfig();
+      setSavedAiConfig((current) => current ? { ...current, configured: false } : null);
+      setAiStatus("idle");
+      setAiMessage("已从 macOS 钥匙串删除 AI 配置");
     } catch (error) {
-      setDeepSeekStatus("error");
-      setDeepSeekMessage(error instanceof Error ? error.message : String(error));
+      setAiStatus("error");
+      setAiMessage(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -112,6 +149,18 @@ export function SettingsPage() {
       setBackupMessage(error instanceof Error ? error.message : "恢复失败，当前资料未被替换");
     }
   };
+
+  const normalizedAiBaseUrl = aiBaseUrl.trim().replace(/\/$/, "");
+  const canReuseAiKey = Boolean(
+    savedAiConfig?.configured
+    && savedAiConfig.provider === aiProvider
+    && savedAiConfig.baseUrl === normalizedAiBaseUrl,
+  );
+  const aiFormComplete = Boolean(
+    aiModel.trim()
+    && (aiProvider !== "custom" || (aiDisplayName.trim() && normalizedAiBaseUrl))
+    && (aiKey.trim() || canReuseAiKey),
+  );
 
   return (
     <section className="settings-page">
@@ -152,29 +201,42 @@ export function SettingsPage() {
           </div>
         </section>
 
-        <section className="settings-card deepseek-card">
+        <section className="settings-card ai-service-card">
           <header>
-            <div><p className="eyebrow">AI METADATA</p><h2>DeepSeek 网页整理</h2></div>
-            <span className={deepSeekConfigured ? "deepseek-badge configured" : "deepseek-badge"}>
-              <Sparkles aria-hidden="true" size={12} />{deepSeekConfigured ? "已配置" : "未配置"}
+            <div><p className="eyebrow">AI METADATA</p><h2>网页整理服务</h2></div>
+            <span className={savedAiConfig?.configured ? "ai-service-badge configured" : "ai-service-badge"}>
+              <Sparkles aria-hidden="true" size={12} />{savedAiConfig?.configured ? `已启用 ${savedAiConfig.displayName}` : "未配置"}
             </span>
           </header>
-          <div className="deepseek-key-row">
-            <KeyRound aria-hidden="true" size={18} />
-            <label>
-              DeepSeek API Key
-              <input type="password" autoComplete="new-password" value={deepSeekKey}
-                placeholder={deepSeekConfigured ? "输入新 Key 可替换当前配置" : "sk-…"}
-                disabled={deepSeekStatus === "saving"}
-                onChange={(event) => setDeepSeekKey(event.target.value)} />
-            </label>
-            <button type="button" className="button-primary" disabled={!deepSeekKey.trim() || deepSeekStatus === "saving"}
-              onClick={() => void saveDeepSeekKey()}>{deepSeekStatus === "saving" ? "验证中…" : "验证并保存"}</button>
-            {deepSeekConfigured && <button type="button" className="icon-button danger" aria-label="删除 DeepSeek API Key"
-              disabled={deepSeekStatus === "saving"} onClick={() => void removeDeepSeekKey()}><Trash2 aria-hidden="true" size={15} /></button>}
+          <div className="ai-provider-options" role="radiogroup" aria-label="AI 服务">
+            {AI_PROVIDER_OPTIONS.map((option) => <button key={option.value} type="button" role="radio"
+              aria-checked={aiProvider === option.value} className={aiProvider === option.value ? "ai-provider-option active" : "ai-provider-option"}
+              disabled={aiStatus === "saving"} onClick={() => selectAiProvider(option.value)}>
+              <strong>{option.label}</strong><span>{option.description}</span>
+            </button>)}
           </div>
-          <p role="status" className={`deepseek-message ${deepSeekStatus}`}>{deepSeekMessage}</p>
-          <p className="settings-note">仅在你点击“AI 获取网页信息”时发送经过截断的网页文本；API Key 只保存在系统钥匙串，不写入数据库、备份或 Git。</p>
+          <div className="ai-service-fields">
+            {aiProvider === "custom" && <>
+              <label>服务名称<input value={aiDisplayName} placeholder="例如：我的模型网关" disabled={aiStatus === "saving"}
+                onChange={(event) => setAiDisplayName(event.target.value)} /></label>
+              <label>Base URL<input value={aiBaseUrl} placeholder="https://example.com/v1" disabled={aiStatus === "saving"}
+                onChange={(event) => setAiBaseUrl(event.target.value)} /></label>
+            </>}
+            <label>模型<input value={aiModel} placeholder="输入模型 ID" disabled={aiStatus === "saving"}
+              onChange={(event) => setAiModel(event.target.value)} /></label>
+            <label>API Key<input type="password" autoComplete="new-password" value={aiKey}
+              placeholder={canReuseAiKey ? "留空则继续使用已保存的 Key" : "输入该服务的 API Key"}
+              disabled={aiStatus === "saving"} onChange={(event) => setAiKey(event.target.value)} /></label>
+          </div>
+          <div className="ai-service-actions">
+            <KeyRound aria-hidden="true" size={17} />
+            <p role="status" className={`ai-service-message ${aiStatus}`}>{aiMessage}</p>
+            <button type="button" className="button-primary" disabled={!aiFormComplete || aiStatus === "saving"}
+              onClick={() => void saveAiService()}>{aiStatus === "saving" ? "验证中…" : "验证并启用"}</button>
+            {savedAiConfig?.configured && <button type="button" className="icon-button danger" aria-label="删除 AI 服务配置"
+              disabled={aiStatus === "saving"} onClick={() => void removeAiService()}><Trash2 aria-hidden="true" size={15} /></button>}
+          </div>
+          <p className="settings-note">内置服务使用官方接口；自定义项支持 OpenAI 兼容 API。仅在点击“AI 获取网页信息”时发送经过截断的网页文本，Key 只保存在系统钥匙串。</p>
         </section>
 
         <section className="settings-card data-card">

@@ -34,13 +34,13 @@ pub async fn fetch_bookmark_metadata(url: String) -> Result<BookmarkMetadata, St
 #[tauri::command]
 pub async fn fetch_ai_bookmark_metadata(url: String) -> Result<BookmarkMetadata, String> {
     let page = fetch_page(&url).await?;
-    let input = crate::deepseek::PageSummaryInput {
+    let input = crate::ai_service::PageSummaryInput {
         url: &page.final_url,
         page_title: page.metadata.title.as_deref(),
         page_description: page.metadata.description.as_deref(),
         visible_text: &page.visible_text,
     };
-    match crate::deepseek::enhance_bookmark(input).await {
+    match crate::ai_service::enhance_bookmark(input).await {
         Ok(generated) => Ok(BookmarkMetadata {
             title: Some(generated.title),
             description: Some(generated.description),

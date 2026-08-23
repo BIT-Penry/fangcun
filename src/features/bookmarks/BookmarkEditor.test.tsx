@@ -69,7 +69,7 @@ describe("BookmarkEditor metadata", () => {
     })));
   });
 
-  it("uses DeepSeek metadata when the user explicitly requests AI整理", async () => {
+  it("uses AI metadata when the user explicitly requests AI整理", async () => {
     const user = userEvent.setup();
     const aiMetadataLoader = vi.fn().mockResolvedValue({
       title: "面向开发者的示例文档",
@@ -86,7 +86,7 @@ describe("BookmarkEditor metadata", () => {
     await waitFor(() => expect(aiMetadataLoader).toHaveBeenCalledWith("https://example.com/docs"));
     expect(await screen.findByDisplayValue("面向开发者的示例文档")).toBeInTheDocument();
     expect(screen.getByDisplayValue("介绍示例接口的主要用途与使用方式。")).toBeInTheDocument();
-    expect(screen.getByText("DeepSeek 已生成标题与简介，可继续修改")).toBeInTheDocument();
+    expect(screen.getByText("AI 已生成标题与简介，可继续修改")).toBeInTheDocument();
   });
 
   it("selects nested folders and reuses existing tags", async () => {
