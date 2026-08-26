@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
-  Check, Clock3, Flag, GripVertical, ListPlus, Plus, SmilePlus, SlidersHorizontal, Trash2,
+  Check, Clock3, GripVertical, ListPlus, Plus,
+  SmilePlus, SlidersHorizontal, Trash2,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
@@ -12,13 +13,8 @@ import { addLocalDays, formatLocalDate, localDateKey } from "../../shared/date";
 import { openExternalUrl } from "../../shared/openExternal";
 import { EmojiPicker } from "./EmojiPicker";
 import { useJournalStore } from "./JournalContext";
+import { PriorityBadge } from "./PriorityBadge";
 import type { Todo, TodoDetails, TodoPriority } from "./types";
-
-const PRIORITY_LABELS: Record<TodoPriority, string> = {
-  high: "高优先级",
-  medium: "中优先级",
-  low: "低优先级",
-};
 
 function groupTodos(todos: Todo[]): Todo[] {
   return [...todos].sort((left, right) => (
@@ -27,14 +23,18 @@ function groupTodos(todos: Todo[]): Todo[] {
   ));
 }
 
-export function DailyWorkspace({ date, compact = false }: { date: string; compact?: boolean }) {
+export function DailyWorkspace({ date, compact = false, onDataChange }: {
+  date: string;
+  compact?: boolean;
+  onDataChange?: () => void;
+}) {
   const repository = useJournalStore();
   const [entry, setEntry] = useState("");
   const [moodEmoji, setMoodEmoji] = useState<string | null>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [newTodo, setNewTodo] = useState("");
   const [newTodoDueTime, setNewTodoDueTime] = useState("");
-  const [newTodoPriority, setNewTodoPriority] = useState<"" | TodoPriority>("");
+  const [newTodoPriority, setNewTodoPriority] = useState<TodoPriority>("low");
   const [showNewTodoDetails, setShowNewTodoDetails] = useState(false);
   const [expandedTodoId, setExpandedTodoId] = useState<string | null>(null);
   const [entryMode, setEntryMode] = useState<"write" | "preview">("write");
@@ -94,11 +94,12 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
           if (entryRevision.current === savedRevision) setEntryDirty(false);
           if (entryRevision.current === savedRevision) entryDirtyRef.current = false;
           setEntryStatus("saved");
+          onDataChange?.();
         })
         .catch(() => setEntryStatus("error"));
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [date, entry, entryDirty, repository]);
+  }, [date, entry, entryDirty, onDataChange, repository]);
 
   useEffect(() => {
     const flushEntry = () => {
@@ -106,6 +107,7 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
       const savedRevision = entryRevision.current;
       void repository.saveEntry(date, latestEntry.current).then(() => {
         if (entryRevision.current === savedRevision) entryDirtyRef.current = false;
+        onDataChange?.();
       });
     };
     window.addEventListener("blur", flushEntry);
@@ -115,7 +117,7 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
       window.removeEventListener("pagehide", flushEntry);
       flushEntry();
     };
-  }, [date, repository]);
+  }, [date, onDataChange, repository]);
 
   const changeEntry = (value: string) => {
     latestEntry.current = value;
@@ -132,13 +134,14 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
     try {
       await repository.createTodo(date, newTodo, {
         dueTime: newTodoDueTime || null,
-        priority: newTodoPriority || null,
+        priority: newTodoPriority,
       });
       setNewTodo("");
       setNewTodoDueTime("");
-      setNewTodoPriority("");
+      setNewTodoPriority("low");
       setShowNewTodoDetails(false);
       setTodos(groupTodos(await repository.listTodos(date)));
+      onDataChange?.();
     } catch {
       setError("新增 Todo 失败，请重试");
     }
@@ -155,6 +158,7 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
     });
     try {
       await repository.setTodoCompleted(todo.id, completed);
+      onDataChange?.();
     } catch {
       setTodos((current) => groupTodos(current.map((item) => item.id === todo.id ? todo : item)));
       setError("更新 Todo 失败，请重试");
@@ -178,6 +182,7 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
     setTodos((current) => current.map((item) => item.id === todo.id ? { ...item, ...details } : item));
     try {
       await repository.updateTodoDetails(todo.id, details);
+      onDataChange?.();
     } catch {
       setTodos((current) => current.map((item) => item.id === todo.id ? todo : item));
       setError("更新 Todo 详情失败，请重试");
@@ -189,6 +194,7 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
     try {
       await repository.moveTodo(todo.id, targetDate);
       setTodos((current) => current.filter((item) => item.id !== todo.id));
+      onDataChange?.();
     } catch {
       setError("移动 Todo 失败，请重试");
     }
@@ -198,6 +204,7 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
     try {
       await repository.deleteTodo(todo.id);
       setTodos((current) => current.filter((item) => item.id !== todo.id));
+      onDataChange?.();
     } catch {
       setError("删除 Todo 失败，请重试");
     }
@@ -231,6 +238,7 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
     setShowMoodPicker(false);
     try {
       await repository.setEntryMood(date, emoji);
+      onDataChange?.();
     } catch {
       setMoodEmoji(previousMood);
       setError("保存今日状态失败，请重试");
@@ -261,7 +269,9 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
   const openTodos = todos.filter((todo) => !todo.isCompleted);
   const completedTodos = todos.filter((todo) => todo.isCompleted);
 
-  const renderTodo = (todo: Todo) => (
+  const renderTodo = (todo: Todo) => {
+    const displayPriority = todo.priority ?? "low";
+    return (
     <article key={todo.id} className={todo.isCompleted ? "todo-item completed" : "todo-item"}
       draggable onDragStart={() => { draggedTodo.current = todo.id; }}
       onDragOver={(event) => event.preventDefault()} onDrop={() => void dropBefore(todo.id)}>
@@ -275,12 +285,10 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
               item.id === todo.id ? { ...item, content: event.target.value } : item
             )))}
             onBlur={(event) => void updateContent(todo, event.target.value)} />
-          {(todo.dueTime || todo.priority) && (
-            <div className="todo-meta">
-              {todo.dueTime && <span><Clock3 aria-hidden="true" size={11} />{todo.dueTime}</span>}
-              {todo.priority && <span className={`priority-${todo.priority}`}><Flag aria-hidden="true" size={11} />{PRIORITY_LABELS[todo.priority]}</span>}
-            </div>
-          )}
+          <div className="todo-meta">
+            {todo.dueTime && <span><Clock3 aria-hidden="true" size={11} />{todo.dueTime}</span>}
+            <PriorityBadge priority={displayPriority} />
+          </div>
         </div>
         <button type="button" className={expandedTodoId === todo.id ? "icon-button active" : "icon-button"}
           onClick={() => setExpandedTodoId((current) => current === todo.id ? null : todo.id)}
@@ -295,12 +303,12 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
         <div className="todo-details-editor">
           <label>截止时刻
             <input type="time" aria-label={`设置 ${todo.content} 的截止时刻`} value={todo.dueTime ?? ""}
-              onChange={(event) => void updateDetails(todo, { dueTime: event.target.value || null, priority: todo.priority })} />
+              onChange={(event) => void updateDetails(todo, { dueTime: event.target.value || null, priority: displayPriority })} />
           </label>
           <label>优先级
-            <select aria-label={`设置 ${todo.content} 的优先级`} value={todo.priority ?? ""}
-              onChange={(event) => void updateDetails(todo, { dueTime: todo.dueTime, priority: (event.target.value || null) as TodoPriority | null })}>
-              <option value="">无</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option>
+            <select aria-label={`设置 ${todo.content} 的优先级`} value={displayPriority}
+              onChange={(event) => void updateDetails(todo, { dueTime: todo.dueTime, priority: event.target.value as TodoPriority })}>
+              <option value="high">P1 · 高</option><option value="medium">P2 · 中</option><option value="low">P3 · 低</option>
             </select>
           </label>
           <label>移动到
@@ -318,7 +326,8 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
         </div>
       )}
     </article>
-  );
+    );
+  };
 
   return (
     <section className={compact ? "daily-workspace compact" : "daily-workspace"} aria-label={formatLocalDate(date)}>
@@ -327,7 +336,7 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
         <div className="daily-columns">
           <section className="todo-panel">
             <div className="daily-section-heading">
-              <div><p className="eyebrow">TO DO</p><h2>今日清单</h2></div>
+              <div><h2>今日清单</h2></div>
               <span>{completedTodos.length}/{todos.length}</span>
             </div>
             <form className="todo-add-form" onSubmit={(event) => void addTodo(event)}>
@@ -346,8 +355,8 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
                   <label>截止时刻<input type="time" aria-label="新 Todo 截止时刻" value={newTodoDueTime}
                     onChange={(event) => setNewTodoDueTime(event.target.value)} /></label>
                   <label>优先级<select aria-label="新 Todo 优先级" value={newTodoPriority}
-                    onChange={(event) => setNewTodoPriority(event.target.value as "" | TodoPriority)}>
-                    <option value="">无</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option>
+                    onChange={(event) => setNewTodoPriority(event.target.value as TodoPriority)}>
+                    <option value="high">P1 · 高</option><option value="medium">P2 · 中</option><option value="low">P3 · 低（默认）</option>
                   </select></label>
                 </div>
               )}
@@ -364,7 +373,7 @@ export function DailyWorkspace({ date, compact = false }: { date: string; compac
 
           <section className="entry-panel">
             <div className="daily-section-heading">
-              <div><p className="eyebrow">JOURNAL</p><h2>随笔</h2></div>
+              <div><h2>随笔</h2></div>
               <div className="entry-heading-actions">
                 <button type="button" className={moodEmoji ? "mood-button selected" : "mood-button"}
                   onClick={() => { setShowMoodPicker((current) => !current); setShowEntryEmojiPicker(false); }}

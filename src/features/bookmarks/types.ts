@@ -46,6 +46,7 @@ export interface BookmarkImportResult {
   importedCount: number;
   updatedCount: number;
   skippedCount: number;
+  enrichmentTargets: { id: string; url: string }[];
 }
 
 export type BookmarkImportStrategy = "skip" | "fill";
@@ -55,7 +56,11 @@ export interface BookmarksStore {
   listFolders(): Promise<BookmarkFolder[]>;
   createBookmark(input: BookmarkInput): Promise<void>;
   updateBookmark(id: string, input: BookmarkInput): Promise<void>;
+  updateBookmarkMetadata(id: string, description: string | null, faviconUrl: string | null): Promise<void>;
   deleteBookmark(id: string): Promise<void>;
+  deleteFolder(id: string): Promise<void>;
+  moveBookmark(id: string, folderId: string | null): Promise<void>;
+  moveFolder(id: string, parentId: string | null): Promise<void>;
   importBookmarks(bookmarks: ImportedBookmark[], strategy: BookmarkImportStrategy): Promise<BookmarkImportResult>;
   searchBookmarks(query: string, limit?: number): Promise<Bookmark[]>;
   countExistingBookmarks(normalizedUrls: string[]): Promise<number>;

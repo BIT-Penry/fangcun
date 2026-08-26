@@ -24,6 +24,15 @@ export interface JournalSearchHit {
   kind: "entry" | "todo";
 }
 
+export interface JournalMonthSummary {
+  entryDays: number;
+  todoCount: number;
+  completedTodoCount: number;
+  p1TodoCount: number;
+  p2TodoCount: number;
+  p3TodoCount: number;
+}
+
 export interface JournalStore {
   getEntry(date: string): Promise<string>;
   getEntryMood(date: string): Promise<string | null>;
@@ -37,5 +46,7 @@ export interface JournalStore {
   moveTodo(id: string, date: string): Promise<void>;
   reorderTodos(ids: string[]): Promise<void>;
   deleteTodo(id: string): Promise<void>;
+  getMonthSummary(startDate: string, endDate: string): Promise<JournalMonthSummary>;
+  getOpenTodoCounts(startDate: string, endDate: string): Promise<Record<string, number>>;
   searchJournal(query: string, limit?: number): Promise<JournalSearchHit[]>;
 }

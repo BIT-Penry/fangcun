@@ -40,6 +40,18 @@ pub fn sql_plugin() -> tauri_plugin_sql::Builder {
                 sql: include_str!("../migrations/0006_journal_details.sql"),
                 kind: MigrationKind::Up,
             },
+            Migration {
+                version: 7,
+                description: "create skill library tables",
+                sql: include_str!("../migrations/0007_skills.sql"),
+                kind: MigrationKind::Up,
+            },
+            Migration {
+                version: 8,
+                description: "default imported skills to universal markdown",
+                sql: include_str!("../migrations/0008_skill_compatibility.sql"),
+                kind: MigrationKind::Up,
+            },
         ],
     )
 }

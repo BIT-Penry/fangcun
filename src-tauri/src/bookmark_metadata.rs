@@ -56,6 +56,31 @@ pub async fn fetch_ai_bookmark_metadata(url: String) -> Result<BookmarkMetadata,
     }
 }
 
+#[tauri::command]
+pub async fn fetch_import_bookmark_metadata(url: String) -> Result<BookmarkMetadata, String> {
+    let page = fetch_page(&url).await?;
+    let input = crate::ai_service::PageSummaryInput {
+        url: &page.final_url,
+        page_title: page.metadata.title.as_deref(),
+        page_description: page.metadata.description.as_deref(),
+        visible_text: &page.visible_text,
+    };
+    match crate::ai_service::enhance_bookmark_description(input).await {
+        Ok(generated) => Ok(BookmarkMetadata {
+            title: None,
+            description: Some(generated.description),
+            favicon_url: page.metadata.favicon_url,
+            ai_enhanced: true,
+            warning: None,
+        }),
+        Err(error) => Ok(BookmarkMetadata {
+            title: None,
+            warning: Some(format!("{error}，已改用网页原始简介")),
+            ..page.metadata
+        }),
+    }
+}
+
 async fn fetch_page(url: &str) -> Result<FetchedPage, String> {
     let requested_url = validate_remote_url(url)?;
     let client = reqwest::Client::builder()
@@ -166,6 +191,7 @@ fn parse_metadata(html: &str, base_url: &Url) -> BookmarkMetadata {
         .filter(|value| !value.is_empty());
     let favicon_url = favicon_href(html)
         .and_then(|href| base_url.join(&decode_entities(&href)).ok())
+        .or_else(|| base_url.join("/favicon.ico").ok())
         .filter(|url| matches!(url.scheme(), "http" | "https"))
         .map(|url| url.to_string());
 
@@ -300,6 +326,18 @@ mod tests {
         assert_eq!(
             metadata.favicon_url.as_deref(),
             Some("https://example.com/assets/icon.png")
+        );
+    }
+
+    #[test]
+    fn falls_back_to_the_sites_standard_favicon_path() {
+        let metadata = parse_metadata(
+            "<html><head><title>Example</title></head></html>",
+            &Url::parse("https://example.com/docs").unwrap(),
+        );
+        assert_eq!(
+            metadata.favicon_url.as_deref(),
+            Some("https://example.com/favicon.ico")
         );
     }
 

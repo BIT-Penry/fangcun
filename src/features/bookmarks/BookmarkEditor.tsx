@@ -136,7 +136,6 @@ export function BookmarkEditor({
       <section role="dialog" aria-modal="true" aria-labelledby="bookmark-editor-title" className="bookmark-editor">
         <header className="bookmark-editor-header">
           <div>
-            <p className="eyebrow">{bookmark ? "编辑资料" : "保存到方寸"}</p>
             <h2 id="bookmark-editor-title">{bookmark ? "编辑书签" : "添加书签"}</h2>
           </div>
           <button type="button" className="icon-button" onClick={onClose} disabled={saving} aria-label="关闭">

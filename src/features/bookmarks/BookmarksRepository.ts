@@ -215,8 +215,80 @@ export class BookmarksRepository implements BookmarksStore {
     await this.db.execute("DELETE FROM bookmarks WHERE id = $1", [id]);
   }
 
+  async deleteFolder(id: string): Promise<void> {
+    const folders = await this.db.select<{ id: string }>(
+      `WITH RECURSIVE descendants(id) AS (
+         SELECT id FROM bookmark_folders WHERE id = $1
+         UNION ALL
+         SELECT folder.id FROM bookmark_folders folder
+         JOIN descendants parent ON folder.parent_id = parent.id
+       )
+       SELECT id FROM descendants`,
+      [id],
+    );
+    if (folders.length === 0) throw new Error("要删除的文件夹不存在");
+    const folderPlaceholders = folders.map((_, index) => `$${index + 1}`).join(", ");
+    const folderIds = folders.map((folder) => folder.id);
+    const bookmarks = await this.db.select<{ id: string }>(
+      `SELECT id FROM bookmarks WHERE folder_id IN (${folderPlaceholders})`,
+      folderIds,
+    );
+    await this.db.execute(
+      `DELETE FROM bookmark_folders WHERE id IN (${folderPlaceholders})`,
+      folderIds,
+    );
+    if (bookmarks.length > 0) {
+      const bookmarkPlaceholders = bookmarks.map((_, index) => `$${index + 1}`).join(", ");
+      await this.db.execute(
+        `DELETE FROM bookmarks WHERE id IN (${bookmarkPlaceholders})`,
+        bookmarks.map((bookmark) => bookmark.id),
+      );
+    }
+  }
+
+  async moveBookmark(id: string, folderId: string | null): Promise<void> {
+    const result = await this.db.execute(
+      "UPDATE bookmarks SET folder_id = $1, updated_at = $2 WHERE id = $3",
+      [folderId, this.now(), id],
+    );
+    if (result.rowsAffected === 0) throw new Error("要移动的书签不存在");
+  }
+
+  async updateBookmarkMetadata(id: string, description: string | null, faviconUrl: string | null): Promise<void> {
+    const result = await this.db.execute(
+      `UPDATE bookmarks
+       SET description = CASE WHEN TRIM(description) = '' THEN COALESCE($1, description) ELSE description END,
+           favicon_url = COALESCE(favicon_url, $2), updated_at = $3
+       WHERE id = $4`,
+      [description, faviconUrl, this.now(), id],
+    );
+    if (result.rowsAffected === 0) throw new Error("要补全的书签不存在");
+  }
+
+  async moveFolder(id: string, parentId: string | null): Promise<void> {
+    if (id === parentId) throw new Error("不能把文件夹移动到自身");
+    if (parentId) {
+      const descendants = await this.db.select<{ id: string }>(
+        `WITH RECURSIVE descendants(id) AS (
+           SELECT id FROM bookmark_folders WHERE id = $1
+           UNION ALL
+           SELECT folder.id FROM bookmark_folders folder
+           JOIN descendants parent ON folder.parent_id = parent.id
+         )
+         SELECT id FROM descendants WHERE id = $2 LIMIT 1`,
+        [id, parentId],
+      );
+      if (descendants.length > 0) throw new Error("不能把文件夹移动到自己的子目录");
+    }
+    const result = await this.db.execute(
+      "UPDATE bookmark_folders SET parent_id = $1, updated_at = $2 WHERE id = $3",
+      [parentId, this.now(), id],
+    );
+    if (result.rowsAffected === 0) throw new Error("要移动的文件夹不存在");
+  }
+
   async importBookmarks(bookmarks: ImportedBookmark[], strategy: BookmarkImportStrategy): Promise<BookmarkImportResult> {
-    const result: BookmarkImportResult = { importedCount: 0, updatedCount: 0, skippedCount: 0 };
+    const result: BookmarkImportResult = { importedCount: 0, updatedCount: 0, skippedCount: 0, enrichmentTargets: [] };
     const timestamp = this.now();
     const createdBookmarkIds: string[] = [];
     const createdFolderIds: string[] = [];
@@ -226,9 +298,10 @@ export class BookmarksRepository implements BookmarksStore {
     try {
       for (const bookmark of bookmarks) {
         const [existing] = await this.db.select<{
-          id: string; title: string; folder_id: string | null; updated_at: string;
+          id: string; title: string; description: string; favicon_url: string | null;
+          folder_id: string | null; updated_at: string;
         }>(
-          "SELECT id, title, folder_id, updated_at FROM bookmarks WHERE normalized_url = $1 LIMIT 1",
+          "SELECT id, title, description, favicon_url, folder_id, updated_at FROM bookmarks WHERE normalized_url = $1 LIMIT 1",
           [bookmark.normalizedUrl],
         );
         if (existing) {
@@ -251,6 +324,9 @@ export class BookmarksRepository implements BookmarksStore {
             [bookmark.title, folderId, timestamp, existing.id],
           );
           result.updatedCount += 1;
+          if (!(existing.description ?? "").trim() || !existing.favicon_url) {
+            result.enrichmentTargets.push({ id: existing.id, url: bookmark.url });
+          }
           continue;
         }
         const folderId = await this.ensureFolderPath(bookmark.folderPath, timestamp, createdFolderIds);
@@ -263,6 +339,7 @@ export class BookmarksRepository implements BookmarksStore {
         );
         createdBookmarkIds.push(id);
         result.importedCount += 1;
+        result.enrichmentTargets.push({ id, url: bookmark.url });
       }
       return result;
     } catch (error) {

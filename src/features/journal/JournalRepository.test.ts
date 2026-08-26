@@ -48,6 +48,21 @@ describe("JournalRepository", () => {
     expect(select).toHaveBeenLastCalledWith(expect.stringContaining("ORDER BY is_completed"), ["2026-08-21"]);
   });
 
+  it("defaults a new todo to P3", async () => {
+    const execute = vi.fn().mockResolvedValue({ rowsAffected: 1 });
+    const repository = new JournalRepository(
+      { execute, select: vi.fn().mockResolvedValue([{ next_order: 0 }]) } as unknown as DatabasePort,
+      () => "todo-default",
+      () => "2026-08-21T00:00:00.000Z",
+    );
+
+    await repository.createTodo("2026-08-21", "默认任务");
+
+    expect(execute).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO todos"), [
+      "todo-default", "2026-08-21", "默认任务", 0, null, "low", "2026-08-21T00:00:00.000Z",
+    ]);
+  });
+
   it("validates and updates optional todo details", async () => {
     const execute = vi.fn().mockResolvedValue({ rowsAffected: 1 });
     const repository = new JournalRepository(
@@ -92,5 +107,55 @@ describe("JournalRepository", () => {
     await repository.reorderTodos(["todo-b", "todo-a"]);
     expect(execute).toHaveBeenNthCalledWith(1, expect.stringContaining("sort_order = $1"), [0, "2026-08-21T00:00:00.000Z", "todo-b"]);
     expect(execute).toHaveBeenNthCalledWith(2, expect.stringContaining("sort_order = $1"), [1, "2026-08-21T00:00:00.000Z", "todo-a"]);
+  });
+
+  it("summarizes meaningful entries and todo completion for a month", async () => {
+    const select = vi.fn().mockResolvedValue([{
+      entry_days: 4,
+      todo_count: 9,
+      completed_todo_count: 6,
+      p1_todo_count: 2,
+      p2_todo_count: 1,
+      p3_todo_count: 0,
+    }]);
+    const repository = new JournalRepository(
+      { execute: vi.fn(), select } as unknown as DatabasePort,
+    );
+
+    await expect(repository.getMonthSummary("2026-08-01", "2026-09-01")).resolves.toEqual({
+      entryDays: 4,
+      todoCount: 9,
+      completedTodoCount: 6,
+      p1TodoCount: 2,
+      p2TodoCount: 1,
+      p3TodoCount: 0,
+    });
+    expect(select).toHaveBeenCalledWith(expect.stringContaining("TRIM(content) <> ''"), [
+      "2026-08-01", "2026-09-01",
+    ]);
+    expect(select).toHaveBeenCalledWith(expect.stringContaining("priority IS NULL"), [
+      "2026-08-01", "2026-09-01",
+    ]);
+  });
+
+  it("groups unfinished todos by calendar date", async () => {
+    const select = vi.fn().mockResolvedValue([
+      { date: "2026-08-21", open_count: 2 },
+      { date: "2026-08-24", open_count: 1 },
+    ]);
+    const repository = new JournalRepository(
+      { execute: vi.fn(), select } as unknown as DatabasePort,
+    );
+
+    await expect(repository.getOpenTodoCounts("2026-07-27", "2026-09-07")).resolves.toEqual({
+      "2026-08-21": 2,
+      "2026-08-24": 1,
+    });
+    expect(select).toHaveBeenCalledWith(expect.stringContaining("is_completed = 0"), [
+      "2026-07-27", "2026-09-07",
+    ]);
+    expect(select).toHaveBeenCalledWith(expect.stringContaining("GROUP BY todo_date"), [
+      "2026-07-27", "2026-09-07",
+    ]);
   });
 });

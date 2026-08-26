@@ -1,5 +1,5 @@
 import type { DatabasePort } from "../../shared/db/types";
-import type { JournalSearchHit, JournalStore, Todo, TodoDetails, TodoPriority } from "./types";
+import type { JournalMonthSummary, JournalSearchHit, JournalStore, Todo, TodoDetails, TodoPriority } from "./types";
 import { likePattern } from "../../shared/db/search";
 
 interface TodoRow {
@@ -79,7 +79,7 @@ export class JournalRepository implements JournalStore {
   async createTodo(date: string, content: string, details: Partial<TodoDetails> = {}): Promise<string> {
     if (!content.trim()) throw new Error("Todo 内容不能为空");
     const dueTime = details.dueTime ?? null;
-    const priority = details.priority ?? null;
+    const priority = details.priority ?? "low";
     this.validateTodoDetails({ dueTime, priority });
     const [row] = await this.db.select<{ next_order: number }>(
       "SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM todos WHERE todo_date = $1",
@@ -166,6 +166,53 @@ export class JournalRepository implements JournalStore {
 
   async deleteTodo(id: string): Promise<void> {
     await this.db.execute("DELETE FROM todos WHERE id = $1", [id]);
+  }
+
+  async getMonthSummary(startDate: string, endDate: string): Promise<JournalMonthSummary> {
+    const [row] = await this.db.select<{
+      entry_days: number;
+      todo_count: number;
+      completed_todo_count: number;
+      p1_todo_count: number;
+      p2_todo_count: number;
+      p3_todo_count: number;
+    }>(
+      `SELECT
+        (SELECT COUNT(*) FROM daily_entries
+         WHERE entry_date >= $1 AND entry_date < $2
+           AND (TRIM(content) <> '' OR mood_emoji IS NOT NULL)) AS entry_days,
+        (SELECT COUNT(*) FROM todos
+         WHERE todo_date >= $1 AND todo_date < $2) AS todo_count,
+        (SELECT COUNT(*) FROM todos
+         WHERE todo_date >= $1 AND todo_date < $2 AND is_completed = 1) AS completed_todo_count,
+        (SELECT COUNT(*) FROM todos
+         WHERE todo_date >= $1 AND todo_date < $2 AND is_completed = 0 AND priority = 'high') AS p1_todo_count,
+        (SELECT COUNT(*) FROM todos
+         WHERE todo_date >= $1 AND todo_date < $2 AND is_completed = 0 AND priority = 'medium') AS p2_todo_count,
+        (SELECT COUNT(*) FROM todos
+         WHERE todo_date >= $1 AND todo_date < $2 AND is_completed = 0
+           AND (priority = 'low' OR priority IS NULL)) AS p3_todo_count`,
+      [startDate, endDate],
+    );
+    return {
+      entryDays: row?.entry_days ?? 0,
+      todoCount: row?.todo_count ?? 0,
+      completedTodoCount: row?.completed_todo_count ?? 0,
+      p1TodoCount: row?.p1_todo_count ?? 0,
+      p2TodoCount: row?.p2_todo_count ?? 0,
+      p3TodoCount: row?.p3_todo_count ?? 0,
+    };
+  }
+
+  async getOpenTodoCounts(startDate: string, endDate: string): Promise<Record<string, number>> {
+    const rows = await this.db.select<{ date: string; open_count: number }>(
+      `SELECT todo_date AS date, COUNT(*) AS open_count
+       FROM todos
+       WHERE todo_date >= $1 AND todo_date < $2 AND is_completed = 0
+       GROUP BY todo_date`,
+      [startDate, endDate],
+    );
+    return Object.fromEntries(rows.map((row) => [row.date, row.open_count]));
   }
 
   async searchJournal(query: string, limit = 8): Promise<JournalSearchHit[]> {

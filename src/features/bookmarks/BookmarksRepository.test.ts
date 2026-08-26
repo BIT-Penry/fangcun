@@ -115,6 +115,86 @@ describe("BookmarksRepository", () => {
     })).rejects.toBeInstanceOf(DuplicateBookmarkError);
   });
 
+  it("deletes an empty folder branch", async () => {
+    const select = vi.fn()
+      .mockResolvedValueOnce([{ id: "folder-research" }, { id: "folder-papers" }])
+      .mockResolvedValueOnce([]);
+    const execute = vi.fn().mockResolvedValue({ rowsAffected: 3 });
+    const repository = new BookmarksRepository({ select, execute } as unknown as DatabasePort);
+
+    await expect(repository.deleteFolder("folder-research")).resolves.toBeUndefined();
+    expect(select).toHaveBeenCalledWith(expect.stringContaining("WITH RECURSIVE descendants"), ["folder-research"]);
+    expect(execute).toHaveBeenCalledWith(expect.stringContaining("DELETE FROM bookmark_folders"), ["folder-research", "folder-papers"]);
+  });
+
+  it("deletes bookmarks after removing their folder branch", async () => {
+    const select = vi.fn()
+      .mockResolvedValueOnce([{ id: "folder-research" }])
+      .mockResolvedValueOnce([{ id: "bookmark-1" }, { id: "bookmark-2" }]);
+    const execute = vi.fn().mockResolvedValue({ rowsAffected: 1 });
+    const repository = new BookmarksRepository({ select, execute } as unknown as DatabasePort);
+
+    await expect(repository.deleteFolder("folder-research")).resolves.toBeUndefined();
+    expect(execute).toHaveBeenNthCalledWith(1, expect.stringContaining("DELETE FROM bookmark_folders"), ["folder-research"]);
+    expect(execute).toHaveBeenNthCalledWith(2, expect.stringContaining("DELETE FROM bookmarks"), ["bookmark-1", "bookmark-2"]);
+  });
+
+  it("moves a bookmark into another folder", async () => {
+    const execute = vi.fn().mockResolvedValue({ rowsAffected: 1 });
+    const repository = new BookmarksRepository(
+      { select: vi.fn(), execute } as unknown as DatabasePort,
+      undefined,
+      () => "2026-08-23T00:00:00.000Z",
+    );
+
+    await expect(repository.moveBookmark("bookmark-1", "folder-target")).resolves.toBeUndefined();
+    expect(execute).toHaveBeenCalledWith(
+      "UPDATE bookmarks SET folder_id = $1, updated_at = $2 WHERE id = $3",
+      ["folder-target", "2026-08-23T00:00:00.000Z", "bookmark-1"],
+    );
+  });
+
+  it("moves a folder to the root while preventing hierarchy cycles", async () => {
+    const select = vi.fn().mockResolvedValue([{ id: "folder-child" }]);
+    const execute = vi.fn().mockResolvedValue({ rowsAffected: 1 });
+    const repository = new BookmarksRepository(
+      { select, execute } as unknown as DatabasePort,
+      undefined,
+      () => "2026-08-23T00:00:00.000Z",
+    );
+
+    await expect(repository.moveFolder("folder-child", null)).resolves.toBeUndefined();
+    expect(execute).toHaveBeenCalledWith(
+      "UPDATE bookmark_folders SET parent_id = $1, updated_at = $2 WHERE id = $3",
+      [null, "2026-08-23T00:00:00.000Z", "folder-child"],
+    );
+
+    await expect(repository.moveFolder("folder-parent", "folder-child")).rejects.toThrow("不能把文件夹移动到自己的子目录");
+  });
+
+  it("fills imported metadata without replacing an existing title or description", async () => {
+    const execute = vi.fn().mockResolvedValue({ rowsAffected: 1 });
+    const repository = new BookmarksRepository(
+      { select: vi.fn(), execute } as unknown as DatabasePort,
+      undefined,
+      () => "2026-08-23T00:00:00.000Z",
+    );
+
+    await repository.updateBookmarkMetadata(
+      "bookmark-1",
+      "AI 生成的简介",
+      "https://example.com/favicon.ico",
+    );
+
+    expect(execute).toHaveBeenCalledWith(expect.stringContaining("CASE WHEN TRIM(description) = ''"), [
+      "AI 生成的简介",
+      "https://example.com/favicon.ico",
+      "2026-08-23T00:00:00.000Z",
+      "bookmark-1",
+    ]);
+    expect(execute.mock.calls[0][0]).not.toContain("title =");
+  });
+
   it("imports bookmarks while preserving nested folders", async () => {
     const select = vi.fn()
       .mockResolvedValueOnce([])
@@ -133,7 +213,12 @@ describe("BookmarksRepository", () => {
       normalizedUrl: "https://example.com/paper",
       title: "论文主页",
       folderPath: ["研究", "论文"],
-    }], "skip")).resolves.toEqual({ importedCount: 1, updatedCount: 0, skippedCount: 0 });
+    }], "skip")).resolves.toEqual({
+      importedCount: 1,
+      updatedCount: 0,
+      skippedCount: 0,
+      enrichmentTargets: [{ id: "bookmark-1", url: "https://example.com/paper" }],
+    });
     expect(execute).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO bookmarks"), [
       "bookmark-1", "https://example.com/paper", "https://example.com/paper", "论文主页",
       "folder-papers", "2026-08-21T00:00:00.000Z",
@@ -153,7 +238,7 @@ describe("BookmarksRepository", () => {
       normalizedUrl: "https://example.com/",
       title: "Imported",
       folderPath: ["不应创建"],
-    }], "skip")).resolves.toEqual({ importedCount: 0, updatedCount: 0, skippedCount: 1 });
+    }], "skip")).resolves.toEqual({ importedCount: 0, updatedCount: 0, skippedCount: 1, enrichmentTargets: [] });
     expect(execute).not.toHaveBeenCalled();
   });
 

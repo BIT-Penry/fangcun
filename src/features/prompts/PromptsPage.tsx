@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Clipboard, Plus, Search, Star, Tag, Trash2, X } from "lucide-react";
+import { Check, ChevronRight, Clipboard, Plus, Search, Sparkles, Star, Tag, Trash2, X } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { usePromptsStore } from "./PromptsContext";
 import type { Prompt, PromptInput } from "./types";
+import { formatPromptContent } from "../../shared/aiService";
 import { useSessionState } from "../../shared/useSessionState";
 
 interface PromptDraft extends PromptInput { id: string | null }
@@ -27,17 +29,23 @@ function parseTags(value: string) {
 
 export function PromptsPage() {
   const repository = usePromptsStore();
+  const [routeParams, setRouteParams] = useSearchParams();
+  const routePromptId = routeParams.get("open");
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [draft, setDraft] = useState<PromptDraft | null>(null);
   const [tagsText, setTagsText] = useState("");
   const [tagQuery, setTagQuery] = useState("");
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const [cardCopyStatus, setCardCopyStatus] = useState<{ id: string; status: "copied" | "error" } | null>(null);
   const [search, setSearch] = useSessionState("fangcun:prompts:search", "");
   const [tagFilter, setTagFilter] = useSessionState("fangcun:prompts:tag", "");
   const [favoriteOnly, setFavoriteOnly] = useSessionState("fangcun:prompts:favorites", false);
   const [loadError, setLoadError] = useState("");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [formatStatus, setFormatStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [formatPreview, setFormatPreview] = useState<string | null>(null);
+  const [formatMessage, setFormatMessage] = useState("");
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const revision = useRef(0);
@@ -46,11 +54,28 @@ export function PromptsPage() {
   const dirtyRef = useRef(false);
   const savingRef = useRef(false);
   const pendingFlush = useRef(false);
+  const formatRequest = useRef(0);
+  const cardCopyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handledRoutePromptId = useRef<string | null>(null);
   const flushPromptRef = useRef<() => Promise<void>>(async () => undefined);
+
+  const clearPromptRoute = useCallback(() => {
+    if (!routePromptId) return;
+    const nextParams = new URLSearchParams(routeParams);
+    nextParams.delete("open");
+    setRouteParams(nextParams, { replace: true });
+  }, [routeParams, routePromptId, setRouteParams]);
 
   latestDraft.current = draft;
   latestTagsText.current = tagsText;
   dirtyRef.current = dirty;
+
+  const resetFormatState = useCallback(() => {
+    formatRequest.current += 1;
+    setFormatStatus("idle");
+    setFormatPreview(null);
+    setFormatMessage("");
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -63,15 +88,32 @@ export function PromptsPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const selectPrompt = (prompt: Prompt) => {
+  useEffect(() => () => {
+    if (cardCopyTimer.current) clearTimeout(cardCopyTimer.current);
+  }, []);
+
+  const selectPrompt = useCallback((prompt: Prompt) => {
     setDraft(toDraft(prompt));
     setTagsText(prompt.tags.join(", "));
     setTagQuery("");
     setTagPickerOpen(false);
     setCopyStatus("idle");
+    resetFormatState();
     setDirty(false);
     setSaveStatus("idle");
-  };
+  }, [resetFormatState]);
+
+  useEffect(() => {
+    if (!routePromptId) {
+      handledRoutePromptId.current = null;
+      return;
+    }
+    if (handledRoutePromptId.current === routePromptId) return;
+    const target = prompts.find((prompt) => prompt.id === routePromptId);
+    if (!target) return;
+    handledRoutePromptId.current = routePromptId;
+    selectPrompt(target);
+  }, [prompts, routePromptId, selectPrompt]);
 
   const startNewPrompt = useCallback(() => {
     setDraft({ ...EMPTY_DRAFT });
@@ -79,9 +121,10 @@ export function PromptsPage() {
     setTagQuery("");
     setTagPickerOpen(false);
     setCopyStatus("idle");
+    resetFormatState();
     setDirty(false);
     setSaveStatus("idle");
-  }, []);
+  }, [resetFormatState]);
 
   useEffect(() => {
     window.addEventListener("fangcun:quick-add", startNewPrompt);
@@ -93,7 +136,10 @@ export function PromptsPage() {
     setDraft((current) => current ? { ...current, ...patch } : current);
     setDirty(true);
     setSaveStatus("idle");
-    if ("content" in patch) setCopyStatus("idle");
+    if ("content" in patch) {
+      setCopyStatus("idle");
+      resetFormatState();
+    }
     if (savingRef.current) pendingFlush.current = true;
   };
 
@@ -215,12 +261,62 @@ export function PromptsPage() {
     }
   };
 
+  const copyPromptFromCard = async (prompt: Prompt) => {
+    if (!prompt.content.trim()) return;
+    if (cardCopyTimer.current) clearTimeout(cardCopyTimer.current);
+    try {
+      await navigator.clipboard.writeText(prompt.content);
+      setCardCopyStatus({ id: prompt.id, status: "copied" });
+    } catch {
+      setCardCopyStatus({ id: prompt.id, status: "error" });
+    }
+    cardCopyTimer.current = setTimeout(() => setCardCopyStatus(null), 1800);
+  };
+
+  const formatPrompt = async () => {
+    const source = latestDraft.current?.content ?? "";
+    if (!source.trim()) return;
+    const requestId = ++formatRequest.current;
+    setFormatStatus("loading");
+    setFormatPreview(null);
+    setFormatMessage("正在整理段落、列表与 Markdown 结构…");
+    try {
+      const result = await formatPromptContent(source);
+      if (formatRequest.current !== requestId) return;
+      if (latestDraft.current?.content !== source) {
+        setFormatStatus("error");
+        setFormatMessage("正文在校正期间发生了变化，请重新校正");
+        return;
+      }
+      if (result.content === source) {
+        setFormatStatus("idle");
+        setFormatMessage("当前格式已经很整齐，无需调整");
+        return;
+      }
+      setFormatPreview(result.content);
+      setFormatStatus("ready");
+      setFormatMessage("已生成格式预览，确认后才会替换正文");
+    } catch (error) {
+      if (formatRequest.current !== requestId) return;
+      setFormatStatus("error");
+      setFormatMessage(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const applyFormattedPrompt = () => {
+    if (!formatPreview) return;
+    const content = formatPreview;
+    changeDraft({ content });
+    setFormatMessage("已应用格式校正，正在自动保存");
+  };
+
   const deletePrompt = async () => {
     if (!draft?.id || !window.confirm(`删除提示词“${draft.title || "未命名提示词"}”？此操作无法撤销。`)) return;
     try {
       await repository.deletePrompt(draft.id);
       setDraft(null);
       setTagsText("");
+      clearPromptRoute();
       await load();
     } catch {
       setSaveStatus("error");
@@ -235,9 +331,11 @@ export function PromptsPage() {
     setTagQuery("");
     setTagPickerOpen(false);
     setCopyStatus("idle");
+    resetFormatState();
     setDirty(false);
     setSaveStatus("idle");
-  }, [flushPrompt]);
+    clearPromptRoute();
+  }, [clearPromptRoute, flushPrompt, resetFormatState]);
 
   useEffect(() => {
     if (!draft) return;
@@ -258,7 +356,6 @@ export function PromptsPage() {
     <section className="prompts-page">
       <header className="bookmarks-header">
         <div>
-          <p className="eyebrow">PROMPT CABINET</p>
           <h1>提示词</h1>
           <p className="page-description">整理可复用的表达，让灵感随时可以被调用。</p>
         </div>
@@ -301,13 +398,39 @@ export function PromptsPage() {
               <header><h2>{group.name}</h2><span>{group.prompts.length}</span></header>
               <div className="prompt-card-grid">
                 {group.prompts.map((prompt) => (
-                  <button key={`${group.name}-${prompt.id}`} type="button" className="prompt-card" onClick={() => selectPrompt(prompt)}>
-                    <span className="prompt-card-title">{prompt.title || "未命名提示词"}{prompt.isFavorite && <Star aria-label="已收藏" size={13} fill="currentColor" />}</span>
-                    <span className="prompt-card-content">{prompt.content.replace(/\s+/g, " ").slice(0, 160)}</span>
-                    <span className="prompt-card-tags">
-                      {prompt.tags.length > 0 ? prompt.tags.map((tag) => <span key={tag}>{tag}</span>) : <span>未分类</span>}
-                    </span>
-                  </button>
+                  <article key={`${group.name}-${prompt.id}`} className="prompt-card">
+                    <button type="button" className="prompt-card-open" aria-label={`查看 ${prompt.title || "未命名提示词"}`}
+                      onClick={() => selectPrompt(prompt)}>
+                      <span className="prompt-card-heading">
+                        <span className="prompt-card-title" title={prompt.title || "未命名提示词"}>{prompt.title || "未命名提示词"}</span>
+                        {prompt.isFavorite && <span className="prompt-card-favorite" title="已收藏"><Star aria-label="已收藏" size={13} fill="currentColor" /></span>}
+                      </span>
+                      <span className={prompt.content.trim() ? "prompt-card-content" : "prompt-card-content muted"}>
+                        {prompt.content.trim() ? prompt.content.replace(/\s+/g, " ").slice(0, 180) : "暂无正文，可打开卡片后补充内容。"}
+                      </span>
+                    </button>
+                    <footer className="prompt-card-footer">
+                      <span className="prompt-card-tags">
+                        {prompt.tags.length > 0 ? prompt.tags.map((tag) => <span key={tag}>{tag}</span>) : <span>未分类</span>}
+                      </span>
+                      <span className="prompt-card-actions">
+                        <button type="button"
+                          className={`prompt-card-copy ${cardCopyStatus?.id === prompt.id ? cardCopyStatus.status : ""}`}
+                          disabled={!prompt.content.trim()} onClick={() => void copyPromptFromCard(prompt)}
+                          aria-label={`复制 ${prompt.title || "未命名提示词"} 的正文`}>
+                          {cardCopyStatus?.id === prompt.id && cardCopyStatus.status === "copied"
+                            ? <Check aria-hidden="true" size={13} /> : <Clipboard aria-hidden="true" size={13} />}
+                          {cardCopyStatus?.id === prompt.id
+                            ? cardCopyStatus.status === "copied" ? "已复制" : "复制失败"
+                            : "复制"}
+                        </button>
+                        <button type="button" className="prompt-card-affordance" onClick={() => selectPrompt(prompt)}
+                          aria-label={`查看 ${prompt.title || "未命名提示词"} 的详情`}>
+                          查看<ChevronRight aria-hidden="true" size={13} />
+                        </button>
+                      </span>
+                    </footer>
+                  </article>
                 ))}
               </div>
             </section>
@@ -326,7 +449,7 @@ export function PromptsPage() {
         <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeEditor(); }}>
           <section role="dialog" aria-modal="true" aria-labelledby="prompt-editor-title" className="bookmark-editor prompt-editor-dialog">
             <header className="bookmark-editor-header">
-              <div><p className="eyebrow">{draft.id ? "PROMPT DETAIL" : "NEW PROMPT"}</p><h2 id="prompt-editor-title">{draft.id ? "编辑提示词" : "新建提示词"}</h2></div>
+              <div><h2 id="prompt-editor-title">{draft.id ? "编辑提示词" : "新建提示词"}</h2></div>
               <button type="button" className="icon-button" onClick={closeEditor} disabled={saving} aria-label="关闭"><X aria-hidden="true" size={18} /></button>
             </header>
             <div className="prompt-editor-form">
@@ -349,8 +472,29 @@ export function PromptsPage() {
               </div>
               <input className="prompt-title-input" aria-label="提示词标题" autoFocus={!draft.id} value={draft.title} placeholder="未命名提示词"
                 onChange={(event) => changeDraft({ title: event.target.value })} />
+              <div className="prompt-content-toolbar">
+                <span>正文</span>
+                <button type="button" className="prompt-format-button" disabled={!draft.content.trim() || formatStatus === "loading"}
+                  onClick={() => void formatPrompt()}>
+                  <Sparkles aria-hidden="true" size={13} className={formatStatus === "loading" ? "spinning" : ""} />
+                  {formatStatus === "loading" ? "正在校正…" : "AI 校正格式"}
+                </button>
+              </div>
               <textarea className="prompt-content-input" aria-label="提示词正文" value={draft.content}
                 placeholder="在这里写下提示词正文…" onChange={(event) => changeDraft({ content: event.target.value })} />
+              {formatMessage && <p role="status" className={`prompt-format-message ${formatStatus}`}>{formatMessage}</p>}
+              {formatPreview && formatStatus === "ready" && (
+                <section className="prompt-format-preview" aria-label="格式校正预览">
+                  <header>
+                    <div><strong>格式校正预览</strong><span>原正文尚未被修改</span></div>
+                    <div>
+                      <button type="button" className="button-secondary" onClick={resetFormatState}>保留原文</button>
+                      <button type="button" className="button-primary" onClick={applyFormattedPrompt}>应用格式</button>
+                    </div>
+                  </header>
+                  <pre>{formatPreview}</pre>
+                </section>
+              )}
               <div className="prompt-detail-grid">
                 <div className="field-label">标签 <span>选择已有标签，或输入名称创建</span>
                   <div className="tag-combobox" onBlur={(event) => {

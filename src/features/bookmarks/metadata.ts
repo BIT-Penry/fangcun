@@ -15,3 +15,7 @@ export function fetchBookmarkMetadata(url: string): Promise<BookmarkMetadata> {
 export function fetchAiBookmarkMetadata(url: string): Promise<BookmarkMetadata> {
   return invoke<BookmarkMetadata>("fetch_ai_bookmark_metadata", { url });
 }
+
+export function fetchImportBookmarkMetadata(url: string): Promise<BookmarkMetadata> {
+  return invoke<BookmarkMetadata>("fetch_import_bookmark_metadata", { url });
+}

@@ -15,6 +15,8 @@ import { BrowserPreferenceProvider } from "./browser/BrowserPreferenceProvider";
 import type { ThemePreference } from "./theme/theme";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import type { BrowserPreference } from "../shared/openExternal";
+import { SkillsProvider } from "../features/skills/SkillsContext";
+import { SkillsRepository } from "../features/skills/SkillsRepository";
 
 type BootstrapState =
   | { status: "loading" }
@@ -25,6 +27,7 @@ type BootstrapState =
       settingsRepository: SettingsRepository;
       bookmarksRepository: BookmarksRepository;
       promptsRepository: PromptsRepository;
+      skillsRepository: SkillsRepository;
       journalRepository: JournalRepository;
       backupService: BackupService;
     }
@@ -52,6 +55,7 @@ export function AppBootstrap({ loadDatabase = initializeDatabase }: {
           settingsRepository,
           bookmarksRepository: new BookmarksRepository(db),
           promptsRepository: new PromptsRepository(db),
+          skillsRepository: new SkillsRepository(db),
           journalRepository: new JournalRepository(db),
           backupService: new BackupService(db),
         };
@@ -76,11 +80,13 @@ export function AppBootstrap({ loadDatabase = initializeDatabase }: {
       >
         <BookmarksProvider repository={state.bookmarksRepository}>
           <PromptsProvider repository={state.promptsRepository}>
-            <JournalProvider repository={state.journalRepository}>
-              <BackupProvider service={state.backupService}>
-                <AppShell />
-              </BackupProvider>
-            </JournalProvider>
+            <SkillsProvider repository={state.skillsRepository}>
+              <JournalProvider repository={state.journalRepository}>
+                <BackupProvider service={state.backupService}>
+                  <AppShell />
+                </BackupProvider>
+              </JournalProvider>
+            </SkillsProvider>
           </PromptsProvider>
         </BookmarksProvider>
       </BrowserPreferenceProvider>

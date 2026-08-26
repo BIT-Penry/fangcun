@@ -25,13 +25,22 @@ function createStore(overrides: Partial<JournalStore> = {}): JournalStore {
     moveTodo: vi.fn().mockResolvedValue(undefined),
     reorderTodos: vi.fn().mockResolvedValue(undefined),
     deleteTodo: vi.fn().mockResolvedValue(undefined),
+    getMonthSummary: vi.fn().mockResolvedValue({
+      entryDays: 0, todoCount: 0, completedTodoCount: 0,
+      p1TodoCount: 0, p2TodoCount: 0, p3TodoCount: 0,
+    }),
+    getOpenTodoCounts: vi.fn().mockResolvedValue({}),
     searchJournal: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }
 
-function renderWorkspace(store: JournalStore) {
-  return render(<JournalProvider repository={store}><DailyWorkspace date="2026-08-21" /></JournalProvider>);
+function renderWorkspace(store: JournalStore, onDataChange?: () => void) {
+  return render(
+    <JournalProvider repository={store}>
+      <DailyWorkspace date="2026-08-21" onDataChange={onDataChange} />
+    </JournalProvider>,
+  );
 }
 
 describe("DailyWorkspace", () => {
@@ -51,7 +60,8 @@ describe("DailyWorkspace", () => {
   it("adds and edits optional todo details", async () => {
     const user = userEvent.setup();
     const store = createStore();
-    renderWorkspace(store);
+    const onDataChange = vi.fn();
+    renderWorkspace(store, onDataChange);
     await screen.findByDisplayValue("写实验记录");
     await user.click(screen.getByRole("button", { name: "添加截止时刻和优先级" }));
     fireEvent.change(screen.getByLabelText("新 Todo 截止时刻"), { target: { value: "18:30" } });
@@ -65,7 +75,22 @@ describe("DailyWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "任务详情 写实验记录" }));
     fireEvent.change(screen.getByLabelText("设置 写实验记录 的截止时刻"), { target: { value: "09:15" } });
     await waitFor(() => expect(store.updateTodoDetails).toHaveBeenCalledWith("todo-1", {
-      dueTime: "09:15", priority: null,
+      dueTime: "09:15", priority: "low",
+    }));
+    expect(onDataChange).toHaveBeenCalled();
+  });
+
+  it("creates a P3 todo by default and shows historical unclassified todos as P3", async () => {
+    const user = userEvent.setup();
+    const store = createStore();
+    renderWorkspace(store);
+
+    expect(await screen.findByText("P3")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("新增 Todo"), "默认任务");
+    await user.click(screen.getByRole("button", { name: "添加 Todo" }));
+
+    await waitFor(() => expect(store.createTodo).toHaveBeenCalledWith("2026-08-21", "默认任务", {
+      dueTime: null, priority: "low",
     }));
   });
 
