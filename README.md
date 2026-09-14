@@ -1,25 +1,153 @@
 # 方寸 · Fangcun
 
-方寸是一款本地优先的个人桌面工作台，用于集中管理书签、提示词、每日待办和随笔记录。
+**方寸之间，自有天地。**
 
-## Status
+把书签、提示词、Agent Skill、日记与常用工具，收进一个安静、有序的本地工作台。
 
-The repository is implementing the foundation milestone. Bookmark, prompt, journal, search, and backup workflows are on the MVP roadmap and are not complete yet.
+方寸是一款面向 macOS 的个人桌面应用。你可以整理收藏的网页，保存反复使用的提示词和技能，记录每天的行动与想法，也可以按需接入自己的 AI 服务，辅助整理内容。
 
-## MVP modules
+[版本与下载](https://github.com/BIT-Penry/fangcun/releases) · [反馈问题](https://github.com/BIT-Penry/fangcun/issues/new/choose) · [开发指南](docs/development.md)
 
-- 首页
-- 书签
-- 提示词
-- 日记
-- 设置
+> 当前候选版本为 `0.1.0-beta.1`，采用 MIT 许可证，正在准备首个公开测试版本。安装包是否可用、支持的芯片与系统要求，以 Releases 中具体版本的说明为准；如果暂无安装包，可以从源码运行。
 
-Fangcun stores core data locally and requires no account or hosted server.
+## 方寸可以做什么
 
-## Development
+### 书签：让收藏更容易找回来
 
-See [docs/development.md](docs/development.md).
+- 导入、导出浏览器 Bookmark HTML，保留文件夹层级；导入前预览重复和无效链接。
+- 在链接卡片与文件夹视图之间切换，通过搜索、文件夹和标签查找资料。
+- 新建、重命名、删除文件夹，拖动整理层级，点击路径返回上级目录。
+- 通过系统默认或指定浏览器打开书签，一键复制链接。
+- 获取网页信息，并按需使用 AI 补充简介。
 
-## Design
+### 提示词：保存可以反复使用的表达
 
-See [the MVP design specification](docs/superpowers/specs/2026-08-21-fangcun-design.md).
+- 用卡片管理提示词，支持搜索、标签与收藏。
+- 编辑和预览 Markdown，一键复制正文。
+- 使用 AI 校正粘贴后杂乱的格式。
+
+### 技能库：收好你的 Agent Skill
+
+- 新建 Skill，或导入 Markdown 文件、ZIP 技能包和 GitHub 链接。
+- 同一来源的多个 Skill 以合集展示，单项技能也可以独立管理。
+- 保存技能正文与配套资源，查看脚本、参考资料和素材数量。
+- 使用 AI 校正格式、生成一句话简介和推荐标签，优先复用已有标签。
+- 导出单项技能或整个合集；对正文中可识别的 `../技能名/` 引用，一并打包库内依赖，并提示缺失项。
+
+方寸用于收录和整理 Skill，不会在导入时安装或执行其中的脚本。导出后的技能仍需交给相应智能体使用；“通用 Markdown”分类不代表已经验证所有平台的兼容性。
+
+### 日记：把行动与想法放在同一天
+
+- 用日历浏览每日记录，查看任务完成状态与月度概览。
+- 管理待办事项、优先级、时间与日期迁移。
+- 写 Markdown 随笔，预览公式，记录当天心情。
+- 从首页继续处理近期内容、查看今日焦点和今日一笔。
+
+### 工具箱：常用的小工具，随手打开
+
+- **公式识别**：粘贴、拖入或选择公式图片，转换为可编辑的 LaTeX，并查看渲染结果。当前识别实现使用 Kimi，需要配置可用的 Kimi API Key。
+- **网速测量**：测量下载、上传、响应延迟及负载延迟。测试连接 Cloudflare 并收发临时数据，结果受网络、VPN 和后台任务影响，方寸不保存测速结果。
+
+此外，还支持全局搜索、明暗主题切换、数据库 ZIP 备份与恢复。
+
+## 开始使用
+
+### 安装测试版
+
+1. 打开 [Releases](https://github.com/BIT-Penry/fangcun/releases)，查看是否已有可下载版本。
+2. 阅读该版本的系统、芯片、签名状态和已知问题说明，再下载对应安装包。
+3. 如果提供 DMG，打开后将「方寸」拖入「应用程序」目录，再从那里启动。
+4. 首次体验可以先添加少量资料；导入大量内容或升级前，建议在「设置」中创建备份。
+
+当前主要验证环境为 Apple 芯片 Mac。Intel Mac、Windows 和 Linux 尚未完成发布验证。未经过 Developer ID 签名与苹果公证的测试包可能受到 macOS 安全检查限制，具体安装方式以对应版本说明为准。
+
+### 第一次打开后
+
+- 在「书签」中导入浏览器导出的 HTML，或手动添加一个网址。
+- 在「提示词」中保存常用指令，在「技能库」中导入一个 `SKILL.md`。
+- 在「日记」中添加今日待办，写下第一条随笔。
+- 需要智能整理或公式识别时，再到「设置」中配置 AI 服务。
+
+### AI 服务配置
+
+「设置」提供 DeepSeek、Kimi、OpenAI 和自定义 OpenAI 兼容接口入口。填写服务地址、模型与自己的 API Key，验证后启用。模型可用性和功能支持取决于所选服务，兼容接口也可能存在差异。
+
+基础资料管理无需配置 AI。AI 功能需要联网，请求费用由你使用的服务商按其规则收取。当前公式识别专门接入 Kimi，并非任意文本模型都能处理图片。
+
+### 常用快捷键
+
+| 快捷键 | 用途 |
+| --- | --- |
+| `⌘ K` | 搜索书签、提示词、日记和待办 |
+| `⌘ N` | 触发当前页面支持的快速添加操作 |
+
+## 数据保存与联网行为
+
+方寸无需注册方寸账号，核心资料保存在本机 SQLite 数据库中。实际数据目录可在「设置」中查看，应用标识为 `com.fangcun.app`。
+
+- **本地资料**：书签、提示词、技能、日记和待办保存在本机，不提供自动云同步。
+- **AI 请求**：使用智能整理、导入时的 AI 补全或公式识别时，相关文本或图片会发送给对应 AI 服务商。
+- **网页和技能导入**：获取网页资料、加载远程图标或图片、从 GitHub 导入技能时，会访问对应网站。
+- **网速测量**：会访问 Cloudflare 测速端点并消耗实际网络流量。
+- **API Key**：在 macOS 上保存在系统钥匙串中；应用运行期间会缓存配置，减少重复读取。数据库备份不包含钥匙串中的凭据。
+
+在「设置」中可以导出数据库 ZIP 备份。恢复前会自动保存当前数据库的安全备份。备份可能包含你的完整个人资料，请妥善保管；迁移电脑后，AI 服务凭据需要重新配置。
+
+## 问题反馈与功能建议
+
+欢迎通过 [Issues](https://github.com/BIT-Penry/fangcun/issues/new/choose) 反馈真实使用中的问题。提交前可以先搜索是否已有相同反馈。
+
+反馈 Bug 时，请尽量提供：
+
+- 方寸版本、macOS 版本与芯片类型。
+- 复现步骤、预期结果和实际结果。
+- 截图或错误提示；请遮盖 API Key、个人资料与敏感网址。
+
+功能建议可以描述「你在什么场景下遇到了什么困难」，以及希望如何解决。请勿上传个人数据库、完整备份或真实凭据。
+
+当前仍处于早期测试阶段：部分网站可能拒绝自动获取信息；AI 生成内容与公式识别结果需要核对；Skill 依赖检测仅覆盖当前可识别的相对路径引用，不能保证发现所有外部依赖。
+
+## 从源码运行
+
+开发环境：macOS、Xcode Command Line Tools、Node.js 22、pnpm 10 和稳定版 Rust。当前 CI 使用 Node.js 22 与 pnpm 10。
+
+```bash
+git clone https://github.com/BIT-Penry/fangcun.git
+cd fangcun
+pnpm install --frozen-lockfile
+pnpm tauri dev
+```
+
+桌面功能依赖 Tauri 环境。`pnpm dev` 只启动前端开发服务器，完整体验请使用 `pnpm tauri dev`。
+
+检查与构建：
+
+```bash
+pnpm test:run
+pnpm typecheck
+pnpm build
+cargo test --locked --manifest-path src-tauri/Cargo.toml
+pnpm tauri build --bundles app,dmg
+```
+
+产物位于 `src-tauri/target/release/bundle/`。从源码构建不会自动获得 Apple 开发者签名或公证。更多说明见 [开发指南](docs/development.md)。
+
+## 技术与目录
+
+方寸使用 Tauri 2、Rust、React 19、TypeScript、Vite 和 SQLite；Markdown 与公式预览使用 react-markdown 和 KaTeX。
+
+| 路径 | 内容 |
+| --- | --- |
+| `src/app/` | 应用外壳、路由与导航 |
+| `src/features/` | 书签、提示词、技能库、日记、工具箱等功能 |
+| `src/shared/` | 数据库接口、AI 调用与共享工具 |
+| `src-tauri/src/` | 桌面端命令、AI 服务、网页获取与测速 |
+| `src-tauri/migrations/` | SQLite 数据库迁移 |
+| `.github/workflows/` | 自动化检查 |
+| `docs/` | 开发说明与设计记录 |
+
+## 测试版与开源计划
+
+近期重点是首次安装、数据备份与恢复、核心操作稳定性，以及根据试用反馈完善文档。发布进度请关注 Releases；源码公开与安装包发布状态分别以仓库和版本页面为准。
+
+方寸的项目代码采用 [MIT 许可证](LICENSE)。第三方依赖、导入的 Skill 和其他内容遵循各自的授权。

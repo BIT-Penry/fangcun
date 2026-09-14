@@ -1,10 +1,13 @@
 import { BrowserRouter } from "react-router-dom";
 import { AppBootstrap } from "./AppBootstrap";
+import { AppErrorBoundary } from "./AppErrorBoundary";
 
 export function App() {
   return (
-    <BrowserRouter>
-      <AppBootstrap />
-    </BrowserRouter>
+    <AppErrorBoundary>
+      <BrowserRouter>
+        <AppBootstrap />
+      </BrowserRouter>
+    </AppErrorBoundary>
   );
 }
