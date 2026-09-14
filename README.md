@@ -10,7 +10,7 @@
 
 [版本与下载](https://github.com/BIT-Penry/fangcun/releases) · [反馈问题](https://github.com/BIT-Penry/fangcun/issues/new/choose) · [开发指南](docs/development.md)
 
-> 当前候选版本为 `0.1.0-beta.1`，采用 MIT 许可证，正在准备首个公开测试版本。安装包是否可用、支持的芯片与系统要求，以 Releases 中具体版本的说明为准；如果暂无安装包，可以从源码运行。
+> 当前版本为 `0.1.0-beta.1`，采用 MIT 许可证，处于早期公开测试阶段。Apple 芯片 Mac 的安装包与已知限制见 [Beta 发布页](https://github.com/BIT-Penry/fangcun/releases/tag/v0.1.0-beta.1)。测试包尚未经过 Apple Developer ID 签名与苹果公证；重要资料请保留备份。
 
 ## 方寸可以做什么
 

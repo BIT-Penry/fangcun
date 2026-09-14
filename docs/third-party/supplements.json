@@ -1,0 +1,170 @@
+{
+  "npm: rehype-katex@7.0.1": {
+    "files": [
+      "rehype-katex.txt"
+    ]
+  },
+  "npm: remark-math@6.0.0": {
+    "files": [
+      "remark-math.txt"
+    ]
+  },
+  "cargo: alloc-stdlib@0.2.4": {
+    "files": [
+      "alloc-stdlib.txt"
+    ]
+  },
+  "cargo: crc-catalog@2.5.0": {
+    "files": [
+      "crc-catalog.txt"
+    ],
+    "selectedLicense": "MIT"
+  },
+  "cargo: defmt-parser@1.0.0": {
+    "files": [
+      "defmt-parser.txt"
+    ],
+    "selectedLicense": "MIT"
+  },
+  "cargo: tauri-plugin@2.6.3": {
+    "files": [
+      "tauri-plugin.txt"
+    ],
+    "selectedLicense": "MIT"
+  },
+  "cargo: selectors@0.36.1": {
+    "files": [
+      "mpl-2.0.txt"
+    ],
+    "note": "The published source headers refer to MPL-2.0; the standard license text is supplied here. Unmodified source is available from the source archive URL."
+  },
+  "cargo: seahash@4.1.0": {
+    "files": [
+      "mit.txt"
+    ],
+    "note": "The published Cargo.toml declares MIT but the crate contains no standalone license file. Authors: ticki and Tom Almeida. The standard MIT template is reproduced without inventing copyright dates or substituting ownership; see the unmodified source archive for attribution."
+  },
+  "cargo: block2@0.6.2": {
+    "files": [
+      "objc2-b4167b58.md",
+      "mit.txt"
+    ],
+    "selectedLicense": "MIT",
+    "note": "Upstream provides a licensing statement linking to the MIT terms rather than a complete license file. Both the original statement and the unmodified standard MIT template are supplied; copyright attribution remains in the upstream source."
+  },
+  "cargo: dispatch2@0.3.1": {
+    "files": [
+      "objc2-8852b424.md",
+      "mit.txt"
+    ],
+    "selectedLicense": "MIT",
+    "note": "Upstream provides a licensing statement linking to the MIT terms rather than a complete license file. Both the original statement and the unmodified standard MIT template are supplied; copyright attribution remains in the upstream source."
+  },
+  "cargo: objc2@0.6.4": {
+    "files": [
+      "objc2-8852b424.md",
+      "mit.txt"
+    ],
+    "selectedLicense": "MIT",
+    "note": "Upstream provides a licensing statement linking to the MIT terms rather than a complete license file. Both the original statement and the unmodified standard MIT template are supplied; copyright attribution remains in the upstream source."
+  },
+  "cargo: objc2-encode@4.1.0": {
+    "files": [
+      "objc2-8d214f54.md",
+      "mit.txt"
+    ],
+    "selectedLicense": "MIT",
+    "note": "Upstream provides a licensing statement linking to the MIT terms rather than a complete license file. Both the original statement and the unmodified standard MIT template are supplied; copyright attribution remains in the upstream source."
+  },
+  "cargo: objc2-exception-helper@0.1.1": {
+    "files": [
+      "objc2-8d214f54.md",
+      "mit.txt"
+    ],
+    "selectedLicense": "MIT",
+    "note": "Upstream provides a licensing statement linking to the MIT terms rather than a complete license file. Both the original statement and the unmodified standard MIT template are supplied; copyright attribution remains in the upstream source."
+  },
+  "cargo: objc2-app-kit@0.3.2": {
+    "files": [
+      "objc2-7b1abfd7.md",
+      "mit.txt"
+    ],
+    "selectedLicense": "MIT",
+    "note": "Upstream provides a licensing statement linking to the MIT terms rather than a complete license file. Both the original statement and the unmodified standard MIT template are supplied; copyright attribution remains in the upstream source."
+  },
+  "cargo: objc2-core-foundation@0.3.2": {
+    "files": [
+      "objc2-7b1abfd7.md",
+      "mit.txt"
+    ],
+    "selectedLicense": "MIT",
+    "note": "Upstream provides a licensing statement linking to the MIT terms rather than a complete license file. Both the original statement and the unmodified standard MIT template are supplied; copyright attribution remains in the upstream source."
+  },
+  "cargo: objc2-core-graphics@0.3.2": {
+    "files": [
+      "objc2-7b1abfd7.md",
+      "mit.txt"
+    ],
+    "selectedLicense": "MIT",
+    "note": "Upstream provides a licensing statement linking to the MIT terms rather than a complete license file. Both the original statement and the unmodified standard MIT template are supplied; copyright attribution remains in the upstream source."
+  },
+  "cargo: objc2-foundation@0.3.2": {
+    "files": [
+      "objc2-7b1abfd7.md",
+      "mit.txt"
+    ],
+    "selectedLicense": "MIT",
+    "note": "Upstream provides a licensing statement linking to the MIT terms rather than a complete license file. Both the original statement and the unmodified standard MIT template are supplied; copyright attribution remains in the upstream source."
+  },
+  "cargo: objc2-io-surface@0.3.2": {
+    "files": [
+      "objc2-7b1abfd7.md",
+      "mit.txt"
+    ],
+    "selectedLicense": "MIT",
+    "note": "Upstream provides a licensing statement linking to the MIT terms rather than a complete license file. Both the original statement and the unmodified standard MIT template are supplied; copyright attribution remains in the upstream source."
+  },
+  "cargo: objc2-web-kit@0.3.2": {
+    "files": [
+      "objc2-7b1abfd7.md",
+      "mit.txt"
+    ],
+    "selectedLicense": "MIT",
+    "note": "Upstream provides a licensing statement linking to the MIT terms rather than a complete license file. Both the original statement and the unmodified standard MIT template are supplied; copyright attribution remains in the upstream source."
+  },
+  "cargo: unic-char-property@0.9.0": {
+    "files": [
+      "unic-license.txt",
+      "unic-copyright.txt"
+    ],
+    "selectedLicense": "MIT"
+  },
+  "cargo: unic-char-range@0.9.0": {
+    "files": [
+      "unic-license.txt",
+      "unic-copyright.txt"
+    ],
+    "selectedLicense": "MIT"
+  },
+  "cargo: unic-common@0.9.0": {
+    "files": [
+      "unic-license.txt",
+      "unic-copyright.txt"
+    ],
+    "selectedLicense": "MIT"
+  },
+  "cargo: unic-ucd-version@0.9.0": {
+    "files": [
+      "unic-license.txt",
+      "unic-copyright.txt"
+    ],
+    "selectedLicense": "MIT"
+  },
+  "cargo: unic-ucd-ident@0.9.0": {
+    "files": [
+      "unic-ident-license.txt",
+      "unic-ident-copyright.txt"
+    ],
+    "selectedLicense": "MIT"
+  }
+}

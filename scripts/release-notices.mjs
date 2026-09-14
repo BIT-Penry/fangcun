@@ -10,9 +10,13 @@ const output = path.join(root, "output", "release");
 fs.mkdirSync(output, { recursive: true });
 const sections = ["Fangcun third-party notices", "Includes installed JavaScript dependencies and Cargo packages for " + target + ". Some build-time dependencies are included conservatively."];
 const missing = [];
+const supplemented = [];
+const supplementDirectory = path.join(root, "docs", "third-party");
+const supplements = JSON.parse(fs.readFileSync(path.join(supplementDirectory, "supplements.json"), "utf8"));
+const sources = JSON.parse(fs.readFileSync(path.join(supplementDirectory, "sources.json"), "utf8"));
 let count = 0;
 
-function collect(name, directory, license, extraFile) {
+function collect(name, directory, license, extraFile, sourceArchive, authors) {
   const files = new Set();
   function visit(dir, depth = 0) {
     for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -24,8 +28,19 @@ function collect(name, directory, license, extraFile) {
   visit(directory);
   if (extraFile && fs.existsSync(extraFile)) files.add(extraFile);
   sections.push(`\n${"=".repeat(72)}\n${name}\nDeclared license: ${license || "unspecified"}`);
-  if (!files.size) missing.push(name);
+  if (sourceArchive) sections.push(`Unmodified upstream source archive: ${sourceArchive}`);
+  if (authors?.length) sections.push(`Upstream authors: ${authors.join("; ")}`);
+  const supplement = supplements[name];
+  if (!files.size && !supplement) missing.push(name);
   for (const file of [...files].sort()) sections.push(`\n--- ${path.relative(directory, file)} ---\n${fs.readFileSync(file, "utf8")}`);
+  if (supplement) {
+    supplemented.push(name);
+    if (supplement.selectedLicense) sections.push(`Selected license option: ${supplement.selectedLicense}`);
+    if (supplement.note) sections.push(supplement.note);
+    for (const file of supplement.files) {
+      sections.push(`\n--- Supplemental ${file} ---\nSource: ${sources[file]}\n${fs.readFileSync(path.join(supplementDirectory, file), "utf8")}`);
+    }
+  }
   count++;
 }
 
@@ -58,8 +73,8 @@ const metadata = JSON.parse(execFileSync("cargo", ["metadata", "--locked", "--of
 for (const pkg of metadata.packages.sort((a, b) => a.name.localeCompare(b.name))) {
   if (!pkg.source) continue;
   const directory = path.dirname(pkg.manifest_path);
-  collect(`cargo: ${pkg.name}@${pkg.version}`, directory, pkg.license, pkg.license_file ? path.resolve(directory, pkg.license_file) : null);
+  collect(`cargo: ${pkg.name}@${pkg.version}`, directory, pkg.license, pkg.license_file ? path.resolve(directory, pkg.license_file) : null, `https://crates.io/api/v1/crates/${pkg.name}/${pkg.version}/download`, pkg.authors);
 }
 fs.writeFileSync(path.join(output, "THIRD_PARTY_NOTICES.txt"), sections.join("\n") + "\n");
-fs.writeFileSync(path.join(output, "notice-review.json"), JSON.stringify({ target, packages: count, missingLicenseFiles: missing }, null, 2) + "\n");
+fs.writeFileSync(path.join(output, "notice-review.json"), JSON.stringify({ target, packages: count, missingLicenseFiles: missing, supplementedPackages: supplemented, note: "Includes upstream licensing statements and standard terms where a standalone license file was not shipped. This is a notices inventory, not legal certification." }, null, 2) + "\n");
 console.log(JSON.stringify({ packages: count, missingLicenseFiles: missing }, null, 2));

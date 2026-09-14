@@ -70,13 +70,16 @@ node scripts/release-notices.mjs aarch64-apple-darwin
 
 The generated `output/release/THIRD_PARTY_NOTICES.txt` contains the available license texts. Inspect `output/release/notice-review.json` for packages whose installed archive contains no license file; this collection is not a complete license audit. Resolve remaining notices before public distribution.
 
-To include the project license and collected notices in the app bundle:
+To include notices, remap personal compiler paths, and verify the ad-hoc signature:
 
 ```bash
-npm run tauri -- build --bundles app,dmg --config '{"build":{"beforeBuildCommand":"npm run build"},"bundle":{"resources":{"../LICENSE":"LICENSE","../output/release/THIRD_PARTY_NOTICES.txt":"THIRD_PARTY_NOTICES.txt"}}}'
+node scripts/build-release-app.mjs
+node scripts/package-release.mjs
 ```
 
-The npm command above runs the same project scripts and supports an already-installed dependency tree when a local pnpm wrapper attempts to reinstall it. A clean CI checkout should still install with the frozen pnpm lockfile.
+These scripts currently target Apple Silicon macOS. The packager requires a clean committed checkout and creates ZIP/DMG, checksums, and build metadata in `output/release/`. The DMG uses a standard Applications shortcut, without Finder layout automation. A clean CI checkout should install with the frozen pnpm lockfile first.
+
+For first-launch testing without touching the daily database, run `node scripts/build-release-app.mjs --smoke`. This uses `com.fangcun.release-smoke`; Keychain service identifiers remain unchanged, so do not change AI credentials during that test. Rebuild without `--smoke` for distribution. Upstream notice supplements and their pinned sources are documented in `docs/third-party/`.
 
 - Commit the intended source version so the installer and release source match.
 - Check source files, Git history, and bundled resources for credentials, personal data, and redistribution permissions.
