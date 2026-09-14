@@ -52,6 +52,8 @@ function createBookmarksStore(): BookmarksStore {
     listBookmarks: vi.fn().mockResolvedValue([bookmark]),
     listFolders: vi.fn().mockResolvedValue([]),
     createBookmark: vi.fn().mockResolvedValue(undefined),
+    createFolder: vi.fn().mockResolvedValue("folder-new"),
+    renameFolder: vi.fn().mockResolvedValue(undefined),
     updateBookmark: vi.fn().mockResolvedValue(undefined),
     updateBookmarkMetadata: vi.fn().mockResolvedValue(undefined),
     deleteBookmark: vi.fn().mockResolvedValue(undefined),

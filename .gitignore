@@ -6,3 +6,16 @@ src-tauri/target/
 .impeccable/
 .playwright-cli/
 output/
+.env
+.env.*
+!.env.example
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.p12
+*.pfx
+*.pem
+*.key
+.DS_Store

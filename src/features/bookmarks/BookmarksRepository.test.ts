@@ -99,6 +99,47 @@ describe("BookmarksRepository", () => {
     ]);
   });
 
+  it("creates an empty child folder while rejecting duplicate sibling names", async () => {
+    const select = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: "folder-existing" }]);
+    const execute = vi.fn().mockResolvedValue({ rowsAffected: 1 });
+    const repository = new BookmarksRepository(
+      { select, execute } as unknown as DatabasePort,
+      () => "folder-new",
+      () => "2026-08-26T00:00:00.000Z",
+    );
+
+    await expect(repository.createFolder(" 实验 ", "folder-research")).resolves.toBe("folder-new");
+    expect(execute).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO bookmark_folders"), [
+      "folder-new", "folder-research", "实验", "2026-08-26T00:00:00.000Z",
+    ]);
+    await expect(repository.createFolder("实验", "folder-research"))
+      .rejects.toThrow("当前位置已有同名文件夹");
+  });
+
+  it("renames a folder while rejecting duplicate sibling names", async () => {
+    const select = vi.fn()
+      .mockResolvedValueOnce([{ parent_id: "folder-research" }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ parent_id: "folder-research" }])
+      .mockResolvedValueOnce([{ id: "folder-existing" }]);
+    const execute = vi.fn().mockResolvedValue({ rowsAffected: 1 });
+    const repository = new BookmarksRepository(
+      { select, execute } as unknown as DatabasePort,
+      () => "unused",
+      () => "2026-08-26T00:00:00.000Z",
+    );
+
+    await expect(repository.renameFolder("folder-linux", " Linux 入门 ")).resolves.toBeUndefined();
+    expect(execute).toHaveBeenCalledWith(
+      "UPDATE bookmark_folders SET name = $1, updated_at = $2 WHERE id = $3",
+      ["Linux 入门", "2026-08-26T00:00:00.000Z", "folder-linux"],
+    );
+    await expect(repository.renameFolder("folder-linux", "Docker"))
+      .rejects.toThrow("当前位置已有同名文件夹");
+  });
+
   it("reports duplicate normalized URLs", async () => {
     const execute = vi.fn()
       .mockRejectedValueOnce(new Error("UNIQUE constraint failed: bookmarks.normalized_url"));
@@ -223,13 +264,17 @@ describe("BookmarksRepository", () => {
       "bookmark-1", "https://example.com/paper", "https://example.com/paper", "论文主页",
       "folder-papers", "2026-08-21T00:00:00.000Z",
     ]);
+    expect(select).toHaveBeenCalledTimes(2);
   });
 
   it("does not create folders for skipped duplicate imports", async () => {
-    const select = vi.fn().mockResolvedValueOnce([{
-      id: "bookmark-existing", title: "Existing", folder_id: null,
-      updated_at: "2026-08-20T00:00:00.000Z",
-    }]);
+    const select = vi.fn()
+      .mockResolvedValueOnce([{
+        id: "bookmark-existing", normalized_url: "https://example.com/", title: "Existing",
+        description: "", favicon_url: null, folder_id: null,
+        updated_at: "2026-08-20T00:00:00.000Z",
+      }])
+      .mockResolvedValueOnce([]);
     const execute = vi.fn().mockResolvedValue({ rowsAffected: 1 });
     const repository = new BookmarksRepository({ select, execute } as unknown as DatabasePort);
 

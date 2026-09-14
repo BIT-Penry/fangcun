@@ -30,6 +30,16 @@ interface FolderRow {
   parent_id: string | null;
 }
 
+interface ImportExistingBookmarkRow {
+  id: string;
+  normalized_url: string;
+  title: string;
+  description: string;
+  favicon_url: string | null;
+  folder_id: string | null;
+  updated_at: string;
+}
+
 interface BookmarkSearchRow extends BookmarkRow {
   tag_names: string | null;
 }
@@ -53,6 +63,13 @@ function cleanTags(tags: string[]): string[] {
     if (name) unique.set(name.toLocaleLowerCase(), name);
   }
   return [...unique.values()];
+}
+
+function cleanFolderName(nameInput: string): string {
+  const name = nameInput.trim();
+  if (!name) throw new Error("请输入文件夹名称");
+  if (/[\\/]/.test(name)) throw new Error("文件夹名称不能包含 / 或 \\");
+  return name;
 }
 
 export class BookmarksRepository implements BookmarksStore {
@@ -182,6 +199,48 @@ export class BookmarksRepository implements BookmarksStore {
     }
   }
 
+  async createFolder(nameInput: string, parentId: string | null): Promise<string> {
+    const name = cleanFolderName(nameInput);
+    const [existing] = await this.db.select<{ id: string }>(
+      `SELECT id FROM bookmark_folders
+       WHERE name = $1 COLLATE NOCASE
+         AND (($2 IS NULL AND parent_id IS NULL) OR parent_id = $2)
+       LIMIT 1`,
+      [name, parentId],
+    );
+    if (existing) throw new Error("当前位置已有同名文件夹");
+    const id = this.createId();
+    const timestamp = this.now();
+    await this.db.execute(
+      `INSERT INTO bookmark_folders(id, parent_id, name, sort_order, created_at, updated_at)
+       VALUES ($1, $2, $3, 0, $4, $4)`,
+      [id, parentId, name, timestamp],
+    );
+    return id;
+  }
+
+  async renameFolder(id: string, nameInput: string): Promise<void> {
+    const name = cleanFolderName(nameInput);
+    const [folder] = await this.db.select<{ parent_id: string | null }>(
+      "SELECT parent_id FROM bookmark_folders WHERE id = $1 LIMIT 1",
+      [id],
+    );
+    if (!folder) throw new Error("要重命名的文件夹不存在");
+    const [existing] = await this.db.select<{ id: string }>(
+      `SELECT id FROM bookmark_folders
+       WHERE id <> $1 AND name = $2 COLLATE NOCASE
+         AND (($3 IS NULL AND parent_id IS NULL) OR parent_id = $3)
+       LIMIT 1`,
+      [id, name, folder.parent_id],
+    );
+    if (existing) throw new Error("当前位置已有同名文件夹");
+    const result = await this.db.execute(
+      "UPDATE bookmark_folders SET name = $1, updated_at = $2 WHERE id = $3",
+      [name, this.now(), id],
+    );
+    if (result.rowsAffected === 0) throw new Error("要重命名的文件夹不存在");
+  }
+
   async updateBookmark(id: string, input: BookmarkInput): Promise<void> {
     const normalizedUrl = normalizeBookmarkUrl(input.url);
     const timestamp = this.now();
@@ -296,20 +355,57 @@ export class BookmarksRepository implements BookmarksStore {
       id: string; title: string; folderId: string | null; updatedAt: string;
     }[] = [];
     try {
-      for (const bookmark of bookmarks) {
-        const [existing] = await this.db.select<{
-          id: string; title: string; description: string; favicon_url: string | null;
-          folder_id: string | null; updated_at: string;
-        }>(
-          "SELECT id, title, description, favicon_url, folder_id, updated_at FROM bookmarks WHERE normalized_url = $1 LIMIT 1",
-          [bookmark.normalizedUrl],
+      const existingByUrl = new Map<string, ImportExistingBookmarkRow>();
+      for (let offset = 0; offset < bookmarks.length; offset += 400) {
+        const normalizedUrls = bookmarks.slice(offset, offset + 400).map((bookmark) => bookmark.normalizedUrl);
+        if (normalizedUrls.length === 0) continue;
+        const placeholders = normalizedUrls.map((_, index) => `$${index + 1}`).join(", ");
+        const rows = await this.db.select<ImportExistingBookmarkRow>(
+          `SELECT id, normalized_url, title, description, favicon_url, folder_id, updated_at
+           FROM bookmarks WHERE normalized_url IN (${placeholders})`,
+          normalizedUrls,
         );
+        rows.forEach((row) => existingByUrl.set(row.normalized_url, row));
+      }
+
+      const folderRows = await this.db.select<FolderRow>(
+        "SELECT id, name, parent_id FROM bookmark_folders",
+      );
+      const folderIdsByParentAndName = new Map<string, string>();
+      const folderKey = (parentId: string | null, name: string) => `${parentId ?? ""}\u0000${name.toLocaleLowerCase()}`;
+      folderRows.forEach((folder) => folderIdsByParentAndName.set(folderKey(folder.parent_id, folder.name), folder.id));
+      const ensureImportedFolderPath = async (path: string[]) => {
+        let parentId: string | null = null;
+        for (const input of path) {
+          const name = input.trim();
+          if (!name) continue;
+          const key = folderKey(parentId, name);
+          const existingId = folderIdsByParentAndName.get(key);
+          if (existingId) {
+            parentId = existingId;
+            continue;
+          }
+          const id = this.createId();
+          await this.db.execute(
+            `INSERT INTO bookmark_folders(id, parent_id, name, sort_order, created_at, updated_at)
+             VALUES ($1, $2, $3, 0, $4, $4)`,
+            [id, parentId, name, timestamp],
+          );
+          createdFolderIds.push(id);
+          folderIdsByParentAndName.set(key, id);
+          parentId = id;
+        }
+        return parentId;
+      };
+
+      for (const bookmark of bookmarks) {
+        const existing = existingByUrl.get(bookmark.normalizedUrl);
         if (existing) {
           if (strategy === "skip") {
             result.skippedCount += 1;
             continue;
           }
-          const folderId = await this.ensureFolderPath(bookmark.folderPath, timestamp, createdFolderIds);
+          const folderId = await ensureImportedFolderPath(bookmark.folderPath);
           updatedBookmarks.push({
             id: existing.id,
             title: existing.title,
@@ -329,7 +425,7 @@ export class BookmarksRepository implements BookmarksStore {
           }
           continue;
         }
-        const folderId = await this.ensureFolderPath(bookmark.folderPath, timestamp, createdFolderIds);
+        const folderId = await ensureImportedFolderPath(bookmark.folderPath);
         const id = this.createId();
         await this.db.execute(
           `INSERT INTO bookmarks(

@@ -39,6 +39,8 @@ function createStore(overrides: Partial<BookmarksStore> = {}): BookmarksStore {
     listBookmarks: vi.fn().mockResolvedValue([savedBookmark]),
     listFolders: vi.fn().mockResolvedValue([{ id: "folder-1", name: "研究资料", parentId: null }]),
     createBookmark: vi.fn().mockResolvedValue(undefined),
+    createFolder: vi.fn().mockResolvedValue("folder-new"),
+    renameFolder: vi.fn().mockResolvedValue(undefined),
     updateBookmark: vi.fn().mockResolvedValue(undefined),
     updateBookmarkMetadata: vi.fn().mockResolvedValue(undefined),
     deleteBookmark: vi.fn().mockResolvedValue(undefined),
@@ -210,9 +212,86 @@ describe("BookmarksPage", () => {
     await user.click(expandResearch);
     expect(screen.getByRole("button", { name: "收起文件夹 研究" })).toHaveAttribute("aria-expanded", "true");
     await user.click(screen.getByRole("button", { name: "查看文件夹 论文" }));
-    expect(screen.getByRole("heading", { name: "研究 / 论文" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "打开书签 PyTorch 文档" })).toBeInTheDocument();
+    let breadcrumb = screen.getByRole("navigation", { name: "当前文件夹路径" });
+    expect(within(breadcrumb).getByRole("button", { name: "打开全部书签" })).toBeInTheDocument();
+    expect(within(breadcrumb).getByRole("button", { name: "打开文件夹 研究" })).toBeInTheDocument();
+    expect(within(breadcrumb).getByText("论文")).toHaveAttribute("aria-current", "page");
+    const openBookmark = screen.getByRole("button", { name: "打开书签 PyTorch 文档" });
+    expect(openBookmark).toBeInTheDocument();
+    const bookmarkRow = openBookmark.closest("article");
+    expect(bookmarkRow).not.toBeNull();
+    const setPointerCapture = vi.fn();
+    Object.defineProperty(bookmarkRow!, "setPointerCapture", { configurable: true, value: setPointerCapture });
+    await user.click(openBookmark);
+    expect(setPointerCapture).not.toHaveBeenCalled();
+    expect(openExternalUrl).toHaveBeenCalledWith("https://pytorch.org/docs", "system");
     expect(document.querySelector(".bookmark-card")).not.toBeInTheDocument();
+
+    await user.click(within(breadcrumb).getByRole("button", { name: "打开文件夹 研究" }));
+    breadcrumb = screen.getByRole("navigation", { name: "当前文件夹路径" });
+    expect(within(breadcrumb).getByText("研究")).toHaveAttribute("aria-current", "page");
+
+    await user.click(within(breadcrumb).getByRole("button", { name: "打开全部书签" }));
+    breadcrumb = screen.getByRole("navigation", { name: "当前文件夹路径" });
+    expect(within(breadcrumb).getByText("全部书签")).toHaveAttribute("aria-current", "page");
+  });
+
+  it("creates a child folder from the folder context menu", async () => {
+    const user = userEvent.setup();
+    const repository = createStore();
+    renderPage(repository);
+
+    await screen.findByRole("heading", { name: "PyTorch 文档" });
+    await user.click(screen.getByRole("button", { name: "文件夹视图" }));
+    fireEvent.contextMenu(screen.getByRole("button", { name: "查看文件夹 研究资料" }), {
+      clientX: 120,
+      clientY: 160,
+    });
+
+    const menu = screen.getByRole("menu", { name: "研究资料 文件夹操作" });
+    await user.click(within(menu).getByRole("menuitem", { name: "新建子文件夹…" }));
+    const createDialog = screen.getByRole("dialog", { name: "在 研究资料 中新建文件夹" });
+    await user.type(within(createDialog).getByRole("textbox"), "实验");
+    await user.click(within(createDialog).getByRole("button", { name: "创建文件夹" }));
+
+    await waitFor(() => expect(repository.createFolder).toHaveBeenCalledWith("实验", "folder-1"));
+    expect(screen.queryByRole("dialog", { name: "在 研究资料 中新建文件夹" })).not.toBeInTheDocument();
+  });
+
+  it("renames a folder from the folder context menu", async () => {
+    const user = userEvent.setup();
+    const repository = createStore();
+    renderPage(repository);
+
+    await screen.findByRole("heading", { name: "PyTorch 文档" });
+    await user.click(screen.getByRole("button", { name: "文件夹视图" }));
+    fireEvent.contextMenu(screen.getByRole("button", { name: "查看文件夹 研究资料" }));
+
+    const menu = screen.getByRole("menu", { name: "研究资料 文件夹操作" });
+    await user.click(within(menu).getByRole("menuitem", { name: "重命名文件夹…" }));
+    const renameDialog = screen.getByRole("dialog", { name: "重命名文件夹 研究资料" });
+    const nameInput = within(renameDialog).getByRole("textbox");
+    expect(nameInput).toHaveValue("研究资料");
+    await user.clear(nameInput);
+    await user.type(nameInput, "学习资料");
+    await user.click(within(renameDialog).getByRole("button", { name: "保存名称" }));
+
+    await waitFor(() => expect(repository.renameFolder).toHaveBeenCalledWith("folder-1", "学习资料"));
+    expect(screen.queryByRole("dialog", { name: "重命名文件夹 研究资料" })).not.toBeInTheDocument();
+  });
+
+  it("opens the existing safe delete flow from the folder context menu", async () => {
+    const user = userEvent.setup();
+    renderPage(createStore());
+
+    await screen.findByRole("heading", { name: "PyTorch 文档" });
+    await user.click(screen.getByRole("button", { name: "文件夹视图" }));
+    fireEvent.contextMenu(screen.getByRole("button", { name: "查看文件夹 研究资料" }));
+    await user.click(screen.getByRole("menuitem", { name: "删除文件夹" }));
+
+    const dialog = screen.getByRole("dialog", { name: "删除文件夹？" });
+    expect(within(dialog).getByRole("note")).toHaveTextContent("1 条书签");
+    expect(within(dialog).getByRole("button", { name: "删除全部内容" })).toBeDisabled();
   });
 
   it("deletes an empty folder from the folder browser", async () => {
@@ -326,6 +405,22 @@ describe("BookmarksPage", () => {
     expect(within(dialog).getByText("1 条无效地址将自动跳过")).toBeInTheDocument();
     expect(within(dialog).queryByRole("group", { name: "如何处理资料库中已有的网址？" })).not.toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "导入 1 条书签" })).toBeEnabled();
+  });
+
+  it("does not start hundreds of AI enrichment requests by default for a large import", async () => {
+    const user = userEvent.setup();
+    renderPage(createStore({ listBookmarks: vi.fn().mockResolvedValue([]) }));
+    const links = Array.from({ length: 31 }, (_, index) =>
+      `<DT><A HREF="https://example.com/${index}">示例 ${index}</A>`).join("");
+
+    await user.upload(
+      screen.getByLabelText("选择 Bookmark HTML 文件"),
+      new File([`<!DOCTYPE NETSCAPE-Bookmark-file-1><DL><p>${links}</DL>`], "bookmarks.html", { type: "text/html" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "导入检查" });
+    expect(within(dialog).getByLabelText(/导入后补全卡片资料/)).not.toBeChecked();
+    expect(within(dialog).getByText(/31 条书签.*默认关闭/)).toBeInTheDocument();
   });
 
   it("only offers a duplicate strategy when imported URLs already exist", async () => {

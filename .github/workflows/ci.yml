@@ -25,3 +25,4 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm build
       - run: cargo check --locked --manifest-path src-tauri/Cargo.toml
+      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml

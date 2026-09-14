@@ -22,6 +22,10 @@ export interface FormattedPromptContent {
   content: string;
 }
 
+export interface RecognizedFormula {
+  latex: string;
+}
+
 export function getAiServiceConfig(): Promise<AiServiceConfig> {
   return invoke<AiServiceConfig>("get_ai_service_config");
 }
@@ -57,4 +61,8 @@ export function generateSkillTags(skills: SkillTagSuggestionInput[], existingTag
   skills: Array<{ id: string; tags: string[] }>;
 }> {
   return invoke("generate_skill_tags", { skills, existingTags });
+}
+
+export function recognizeFormula(imageDataUrl: string): Promise<RecognizedFormula> {
+  return invoke<RecognizedFormula>("recognize_formula", { imageDataUrl });
 }

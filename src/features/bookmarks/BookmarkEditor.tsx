@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
-import { Plus, Search, Sparkles, X } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Folder, FolderOpen, Plus, Search, Sparkles, X } from "lucide-react";
 import { fetchAiBookmarkMetadata, fetchBookmarkMetadata, type BookmarkMetadata } from "./metadata";
 import type { Bookmark, BookmarkFolder, BookmarkInput } from "./types";
 import { buildBookmarkFolderOptions, folderPathById } from "./folders";
@@ -35,7 +35,21 @@ export function BookmarkEditor({
   aiMetadataLoader?: (url: string) => Promise<BookmarkMetadata>;
 }) {
   const folderOptions = useMemo(() => buildBookmarkFolderOptions(folders), [folders]);
+  const folderPaths = useMemo(() => folderPathById(folders), [folders]);
+  const foldersById = useMemo(() => new Map(folders.map((folder) => [folder.id, folder])), [folders]);
+  const childrenByParent = useMemo(() => {
+    const children = new Map<string | null, BookmarkFolder[]>();
+    const folderIds = new Set(folders.map((folder) => folder.id));
+    for (const folder of folders) {
+      const parentId = folder.parentId && folderIds.has(folder.parentId) ? folder.parentId : null;
+      children.set(parentId, [...(children.get(parentId) ?? []), folder]);
+    }
+    for (const siblings of children.values()) siblings.sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
+    return children;
+  }, [folders]);
   const [input, setInput] = useState(() => initialInput(bookmark, folders));
+  const [folderPickerOpen, setFolderPickerOpen] = useState(false);
+  const [browsingFolderId, setBrowsingFolderId] = useState<string | null>(bookmark?.folderId ?? null);
   const [tagQuery, setTagQuery] = useState("");
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
   const [error, setError] = useState("");
@@ -45,6 +59,37 @@ export function BookmarkEditor({
   const lastFetchedUrl = useRef(bookmark?.normalizedUrl ?? "");
   const titleEdited = useRef(Boolean(bookmark?.title));
   const descriptionEdited = useRef(Boolean(bookmark?.description));
+
+  const browsingFolder = browsingFolderId ? foldersById.get(browsingFolderId) ?? null : null;
+  const browsingChildren = childrenByParent.get(browsingFolderId) ?? [];
+  const selectedFolderId = folderOptions.find((folder) => folder.path === input.folderName)?.id ?? null;
+  const browsingTrail = useMemo(() => {
+    const trail: BookmarkFolder[] = [];
+    const visited = new Set<string>();
+    let folder = browsingFolderId ? foldersById.get(browsingFolderId) ?? null : null;
+    while (folder && !visited.has(folder.id)) {
+      visited.add(folder.id);
+      trail.unshift(folder);
+      folder = folder.parentId ? foldersById.get(folder.parentId) ?? null : null;
+    }
+    return trail;
+  }, [browsingFolderId, foldersById]);
+
+  const toggleFolderPicker = () => {
+    if (!folderPickerOpen) {
+      const selected = folderOptions.find((folder) => folder.path === input.folderName);
+      setBrowsingFolderId(selected?.id ?? null);
+    }
+    setFolderPickerOpen((open) => !open);
+  };
+
+  const selectBrowsingFolder = () => {
+    setInput((current) => ({
+      ...current,
+      folderName: browsingFolderId ? folderPaths.get(browsingFolderId) ?? "" : "",
+    }));
+    setFolderPickerOpen(false);
+  };
 
   const loadMetadata = async (force = false, useAi = false) => {
     let normalizedUrl: string;
@@ -175,16 +220,66 @@ export function BookmarkEditor({
               onChange={(event) => { descriptionEdited.current = true; setInput({ ...input, description: event.target.value }); }} />
           </label>
 
-          <div className="bookmark-form-grid">
+          <div className={folderPickerOpen ? "bookmark-form-grid folder-picker-open" : "bookmark-form-grid"}>
             <div className="field-label bookmark-folder-picker">
-              文件夹 <span>选择已有文件夹，或用 / 创建层级</span>
-              <select aria-label="选择已有文件夹" value={folderOptions.some((folder) => folder.path === input.folderName) ? input.folderName : ""}
-                onChange={(event) => setInput({ ...input, folderName: event.target.value })}>
-                <option value="">不放入文件夹</option>
-                {folderOptions.map((folder) => <option key={folder.id} value={folder.path}>{folder.path}</option>)}
-              </select>
+              文件夹 <span>逐级选择已有文件夹，或用 / 创建层级</span>
+              <div className="bookmark-folder-picker-shell" onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFolderPickerOpen(false);
+              }} onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setFolderPickerOpen(false);
+                }
+              }}>
+                <button type="button" className="bookmark-folder-picker-trigger" aria-label="选择已有文件夹"
+                  aria-expanded={folderPickerOpen} aria-controls="bookmark-folder-picker-browser" onClick={toggleFolderPicker}>
+                  {input.folderName ? <FolderOpen aria-hidden="true" size={16} /> : <Folder aria-hidden="true" size={16} />}
+                  <span><small>保存位置</small><strong>{input.folderName || "不放入文件夹"}</strong></span>
+                  <ChevronDown aria-hidden="true" size={15} />
+                </button>
+
+                {folderPickerOpen && <div id="bookmark-folder-picker-browser" className="bookmark-folder-picker-browser">
+                  <header>
+                    <button type="button" className="bookmark-folder-picker-back" disabled={!browsingFolder}
+                      aria-label="返回上一级文件夹" onClick={() => setBrowsingFolderId(browsingFolder?.parentId ?? null)}>
+                      <ChevronLeft aria-hidden="true" size={15} />
+                    </button>
+                    <nav aria-label="正在浏览的文件夹路径">
+                      <button type="button" onClick={() => setBrowsingFolderId(null)}>全部文件夹</button>
+                      {browsingTrail.map((folder, index) => <span key={folder.id}>
+                        <ChevronRight aria-hidden="true" size={11} />
+                        {index === browsingTrail.length - 1
+                          ? <strong aria-current="page">{folder.name}</strong>
+                          : <button type="button" onClick={() => setBrowsingFolderId(folder.id)}>{folder.name}</button>}
+                      </span>)}
+                    </nav>
+                  </header>
+
+                  <div className="bookmark-folder-picker-list" role="group" aria-label="当前层级的文件夹">
+                    {browsingChildren.map((folder) => <button type="button" key={folder.id}
+                      className={selectedFolderId === folder.id ? "selected" : ""}
+                      onClick={() => setBrowsingFolderId(folder.id)} aria-label={`进入文件夹 ${folder.name}`}>
+                      <Folder aria-hidden="true" size={16} />
+                      <span><strong>{folder.name}</strong><small>{(childrenByParent.get(folder.id) ?? []).length} 个子文件夹</small></span>
+                      {selectedFolderId === folder.id && <Check aria-hidden="true" size={14} />}
+                      <ChevronRight aria-hidden="true" size={14} />
+                    </button>)}
+                    {browsingChildren.length === 0 && <p>{browsingFolder ? "这个文件夹没有子文件夹" : "还没有可选择的文件夹"}</p>}
+                  </div>
+
+                  <footer>
+                    <span title={browsingFolderId ? folderPaths.get(browsingFolderId) : ""}>
+                      {browsingFolder ? `当前位置：${browsingFolder.name}` : "当前位置：文件夹之外"}
+                    </span>
+                    <button type="button" className="button-primary" onClick={selectBrowsingFolder}
+                      aria-label={browsingFolder ? `选择文件夹 ${folderPaths.get(browsingFolder.id) ?? browsingFolder.name}` : "不放入文件夹"}>
+                      {browsingFolder ? "选择这里" : "不放入文件夹"}
+                    </button>
+                  </footer>
+                </div>}
+              </div>
               <input aria-label="新建文件夹路径" value={input.folderName} placeholder="例如：研究 / 论文 / UAV"
-                onChange={(event) => setInput({ ...input, folderName: event.target.value })} />
+                onChange={(event) => { setInput({ ...input, folderName: event.target.value }); setFolderPickerOpen(false); }} />
             </div>
             <div className="field-label">
               标签 <span>勾选已有标签，或输入名称创建</span>

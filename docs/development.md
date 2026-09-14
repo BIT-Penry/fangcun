@@ -27,7 +27,7 @@
 
 `cargo test --locked --manifest-path src-tauri/Cargo.toml`
 
-CI currently runs frontend tests, type checking, the frontend build, and `cargo check`. Run the Rust unit tests locally with the command above.
+CI runs frontend tests, type checking, the frontend build, `cargo check`, and Rust unit tests.
 
 ## Rust lockfile
 
@@ -61,6 +61,22 @@ Development and installed builds with the same application identifier may access
 AI credentials are persisted in macOS Keychain and are not part of database backups. Do not include real API keys in logs or issues.
 
 ## Preparing a public test release
+
+Collect dependency license files from the installed packages before building release assets:
+
+```bash
+node scripts/release-notices.mjs aarch64-apple-darwin
+```
+
+The generated `output/release/THIRD_PARTY_NOTICES.txt` contains the available license texts. Inspect `output/release/notice-review.json` for packages whose installed archive contains no license file; this collection is not a complete license audit. Resolve remaining notices before public distribution.
+
+To include the project license and collected notices in the app bundle:
+
+```bash
+npm run tauri -- build --bundles app,dmg --config '{"build":{"beforeBuildCommand":"npm run build"},"bundle":{"resources":{"../LICENSE":"LICENSE","../output/release/THIRD_PARTY_NOTICES.txt":"THIRD_PARTY_NOTICES.txt"}}}'
+```
+
+The npm command above runs the same project scripts and supports an already-installed dependency tree when a local pnpm wrapper attempts to reinstall it. A clean CI checkout should still install with the frozen pnpm lockfile.
 
 - Commit the intended source version so the installer and release source match.
 - Check source files, Git history, and bundled resources for credentials, personal data, and redistribution permissions.

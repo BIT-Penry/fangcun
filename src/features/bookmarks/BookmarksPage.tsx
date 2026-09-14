@@ -1,5 +1,5 @@
-import { type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpDown, Check, ChevronDown, ChevronRight, Clipboard, Download, ExternalLink, Folder, FolderOpen, Layers3, LayoutGrid, Pencil, Plus, Search, Tag, Trash2, Upload, X } from "lucide-react";
+import { type FormEvent, type KeyboardEvent, type MouseEvent, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowUpDown, Check, ChevronDown, ChevronRight, Clipboard, Download, ExternalLink, Folder, FolderOpen, FolderPlus, Layers3, LayoutGrid, Pencil, Plus, Search, Tag, Trash2, Upload, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
@@ -27,6 +27,7 @@ interface BookmarkCardProps {
 
 type DragItem = { kind: "folder" | "bookmark"; id: string };
 type BookmarkSort = "updated-desc" | "created-desc" | "created-asc" | "title-asc" | "title-desc" | "domain-asc";
+const AUTO_ENRICH_IMPORT_LIMIT = 30;
 type FolderDeleteRequest = {
   id: string;
   path: string;
@@ -41,6 +42,13 @@ type PointerDragSession = {
   startX: number;
   startY: number;
   active: boolean;
+};
+type FolderContextMenu = {
+  folderId: string | null;
+  folderName: string;
+  x: number;
+  y: number;
+  mode: "menu" | "create" | "rename";
 };
 const ROOT_DROP_TARGET = "__root__";
 const BOOKMARK_CARD_BATCH_SIZE = 48;
@@ -92,7 +100,7 @@ function BookmarkCard({ bookmark, folderPath, copied, onOpen, onCopy, onEdit, on
 
 function FolderTreeNode({
   folder, childrenByParent, counts, expandedIds, selectedId, draggedItem, dropTargetId,
-  onToggle, onSelect, onPointerDown, onPointerMove, onPointerUp, onPointerCancel,
+  onToggle, onSelect, onContextMenu, onPointerDown, onPointerMove, onPointerUp, onPointerCancel,
 }: {
   folder: BookmarkFolder;
   childrenByParent: Map<string | null, BookmarkFolder[]>;
@@ -103,6 +111,7 @@ function FolderTreeNode({
   dropTargetId: string | null;
   onToggle: (id: string) => void;
   onSelect: (id: string) => void;
+  onContextMenu: (event: MouseEvent<HTMLElement>, folder: BookmarkFolder) => void;
   onPointerDown: (event: PointerEvent<HTMLElement>, item: DragItem) => void;
   onPointerMove: (event: PointerEvent<HTMLElement>) => void;
   onPointerUp: (event: PointerEvent<HTMLElement>) => void;
@@ -118,7 +127,8 @@ function FolderTreeNode({
   ].filter(Boolean).join(" ");
   return (
     <div className="bookmark-folder-tree-node">
-      <div className={rowClasses} data-folder-drop-id={folder.id}>
+      <div className={rowClasses} data-folder-drop-id={folder.id}
+        onContextMenu={(event) => onContextMenu(event, folder)}>
         {children.length > 0 ? (
           <button type="button" className="folder-disclosure" aria-expanded={expanded}
             aria-label={`${expanded ? "收起" : "展开"}文件夹 ${folder.name}`} onClick={() => onToggle(folder.id)}>
@@ -136,7 +146,8 @@ function FolderTreeNode({
       {expanded && children.length > 0 && <div className="bookmark-folder-tree-children">
         {children.map((child) => <FolderTreeNode key={child.id} folder={child} childrenByParent={childrenByParent}
           counts={counts} expandedIds={expandedIds} selectedId={selectedId} draggedItem={draggedItem} dropTargetId={dropTargetId}
-          onToggle={onToggle} onSelect={onSelect} onPointerDown={onPointerDown} onPointerMove={onPointerMove}
+          onToggle={onToggle} onSelect={onSelect} onContextMenu={onContextMenu}
+          onPointerDown={onPointerDown} onPointerMove={onPointerMove}
           onPointerUp={onPointerUp} onPointerCancel={onPointerCancel} />)}
       </div>}
     </div>
@@ -205,11 +216,16 @@ export function BookmarksPage() {
   const [folderDeleteRequest, setFolderDeleteRequest] = useState<FolderDeleteRequest | null>(null);
   const [folderDeleteConfirmed, setFolderDeleteConfirmed] = useState(false);
   const [deletingFolder, setDeletingFolder] = useState(false);
+  const [folderContextMenu, setFolderContextMenu] = useState<FolderContextMenu | null>(null);
+  const [folderNameDraft, setFolderNameDraft] = useState("");
+  const [contextMenuError, setContextMenuError] = useState("");
+  const [savingFolder, setSavingFolder] = useState(false);
   const importInput = useRef<HTMLInputElement>(null);
   const pointerDrag = useRef<PointerDragSession | null>(null);
   const suppressDragClick = useRef(false);
   const loadMoreCards = useRef<HTMLButtonElement>(null);
   const handledRouteBookmarkId = useRef<string | null>(null);
+  const folderContextMenuRef = useRef<HTMLDivElement>(null);
   const [visibleCardCount, setVisibleCardCount] = useState(BOOKMARK_CARD_BATCH_SIZE);
 
   const clearBookmarkRoute = useCallback(() => {
@@ -258,6 +274,34 @@ export function BookmarksPage() {
     window.addEventListener("fangcun:quick-add", openEditor);
     return () => window.removeEventListener("fangcun:quick-add", openEditor);
   }, []);
+
+  const closeFolderContextMenu = useCallback(() => {
+    setFolderContextMenu(null);
+    setFolderNameDraft("");
+    setContextMenuError("");
+  }, []);
+
+  useEffect(() => {
+    if (!folderContextMenu) return;
+    const closeOnOutsidePointer = (event: globalThis.PointerEvent) => {
+      if (!folderContextMenuRef.current?.contains(event.target as Node)) closeFolderContextMenu();
+    };
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") closeFolderContextMenu();
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("blur", closeFolderContextMenu);
+    window.addEventListener("resize", closeFolderContextMenu);
+    window.addEventListener("scroll", closeFolderContextMenu, true);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("blur", closeFolderContextMenu);
+      window.removeEventListener("resize", closeFolderContextMenu);
+      window.removeEventListener("scroll", closeFolderContextMenu, true);
+    };
+  }, [closeFolderContextMenu, folderContextMenu]);
 
   const tags = useMemo(
     () => [...new Set(bookmarks.flatMap((bookmark) => bookmark.tags))]
@@ -365,24 +409,18 @@ export function BookmarksPage() {
   }, [bookmarksByFolder, childrenByParent, folders]);
   const activeFolderId = folders.some((folder) => folder.id === selectedFolderId) ? selectedFolderId : "";
   const activeFolder = folders.find((folder) => folder.id === activeFolderId) ?? null;
-  const activeFolderDescendantIds = useMemo(() => {
-    if (!activeFolderId) return new Set<string>();
-    const ids = new Set([activeFolderId]);
-    const pending = [activeFolderId];
-    while (pending.length > 0) {
-      const parentId = pending.pop();
-      if (!parentId) continue;
-      for (const child of childrenByParent.get(parentId) ?? []) {
-        if (ids.has(child.id)) continue;
-        ids.add(child.id);
-        pending.push(child.id);
-      }
+  const activeFolderTrail = useMemo(() => {
+    const foldersById = new Map(folders.map((folder) => [folder.id, folder]));
+    const trail: BookmarkFolder[] = [];
+    const visited = new Set<string>();
+    let folder = activeFolder;
+    while (folder && !visited.has(folder.id)) {
+      visited.add(folder.id);
+      trail.unshift(folder);
+      folder = folder.parentId ? foldersById.get(folder.parentId) ?? null : null;
     }
-    return ids;
-  }, [activeFolderId, childrenByParent]);
-  const activeFolderBookmarkCount = activeFolderId
-    ? bookmarks.filter((bookmark) => bookmark.folderId && activeFolderDescendantIds.has(bookmark.folderId)).length
-    : 0;
+    return trail;
+  }, [activeFolder, folders]);
   const folderViewFolders = childrenByParent.get(activeFolderId || null) ?? [];
   const folderViewBookmarks = bookmarksByFolder.get(activeFolderId || null) ?? [];
 
@@ -448,7 +486,6 @@ export function BookmarksPage() {
       startY: event.clientY,
       active: false,
     };
-    event.currentTarget.setPointerCapture?.(event.pointerId);
   };
 
   const movePointerDrag = (event: PointerEvent<HTMLElement>) => {
@@ -457,6 +494,7 @@ export function BookmarksPage() {
     if (!session.active && Math.hypot(event.clientX - session.startX, event.clientY - session.startY) < 6) return;
     if (!session.active) {
       session.active = true;
+      event.currentTarget.setPointerCapture?.(event.pointerId);
       setDraggedItem(session.item);
     }
     event.preventDefault();
@@ -469,7 +507,9 @@ export function BookmarksPage() {
   const endPointerDrag = (event: PointerEvent<HTMLElement>) => {
     const session = pointerDrag.current;
     if (!session || session.pointerId !== event.pointerId) return;
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
     if (!session.active) {
       pointerDrag.current = null;
       return;
@@ -500,17 +540,85 @@ export function BookmarksPage() {
     }
   };
 
-  const requestFolderDeletion = () => {
-    if (!activeFolder) return;
+  const requestFolderDeletion = (folderId: string) => {
+    const folder = folders.find((item) => item.id === folderId);
+    if (!folder) return;
+    const descendantIds = new Set([folder.id]);
+    const pending = [folder.id];
+    while (pending.length > 0) {
+      const parentId = pending.pop();
+      if (!parentId) continue;
+      for (const child of childrenByParent.get(parentId) ?? []) {
+        if (descendantIds.has(child.id)) continue;
+        descendantIds.add(child.id);
+        pending.push(child.id);
+      }
+    }
     setFolderDeleteConfirmed(false);
     setFolderDeleteRequest({
-      id: activeFolder.id,
-      path: folderPaths.get(activeFolder.id) ?? activeFolder.name,
-      parentId: activeFolder.parentId,
-      descendantIds: new Set(activeFolderDescendantIds),
-      childCount: Math.max(activeFolderDescendantIds.size - 1, 0),
-      bookmarkCount: activeFolderBookmarkCount,
+      id: folder.id,
+      path: folderPaths.get(folder.id) ?? folder.name,
+      parentId: folder.parentId,
+      descendantIds,
+      childCount: Math.max(descendantIds.size - 1, 0),
+      bookmarkCount: bookmarks.filter((bookmark) => bookmark.folderId && descendantIds.has(bookmark.folderId)).length,
     });
+  };
+
+  const openFolderContextMenu = (event: MouseEvent<HTMLElement>, folder: BookmarkFolder | null) => {
+    event.preventDefault();
+    event.stopPropagation();
+    finishDrag();
+    setSelectedFolderId(folder?.id ?? "");
+    setFolderNameDraft("");
+    setContextMenuError("");
+    setFolderContextMenu({
+      folderId: folder?.id ?? null,
+      folderName: folder?.name ?? "全部书签",
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - 250)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - 190)),
+      mode: "menu",
+    });
+  };
+
+  const saveContextFolder = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!folderContextMenu || folderContextMenu.mode === "menu" || savingFolder) return;
+    const name = folderNameDraft.trim();
+    if (!name) {
+      setContextMenuError("请输入文件夹名称");
+      return;
+    }
+    setSavingFolder(true);
+    setContextMenuError("");
+    try {
+      if (folderContextMenu.mode === "rename") {
+        if (!folderContextMenu.folderId) throw new Error("要重命名的文件夹不存在");
+        await repository.renameFolder(folderContextMenu.folderId, name);
+      } else {
+        const id = await repository.createFolder(name, folderContextMenu.folderId);
+        if (folderContextMenu.folderId) {
+          setExpandedFolderIds((current) => new Set(current).add(folderContextMenu.folderId as string));
+        }
+        setSelectedFolderId(id);
+      }
+      closeFolderContextMenu();
+      await load();
+    } catch (error) {
+      setContextMenuError(error instanceof Error ? error.message : "无法保存文件夹名称，请重试");
+    } finally {
+      setSavingFolder(false);
+    }
+  };
+
+  const handleContextMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')];
+    if (items.length === 0) return;
+    event.preventDefault();
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+    const direction = event.key === "ArrowDown" ? 1 : -1;
+    items[(currentIndex + direction + items.length) % items.length]?.focus();
   };
 
   const deleteFolder = async () => {
@@ -563,7 +671,7 @@ export function BookmarksPage() {
       );
       setImportPreview({ ...preview, existingCount });
       setImportStrategy("skip");
-      setEnrichAfterImport(true);
+      setEnrichAfterImport(preview.bookmarks.length <= AUTO_ENRICH_IMPORT_LIMIT);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "无法解析 Bookmark HTML 文件");
     } finally {
@@ -762,6 +870,7 @@ export function BookmarksPage() {
               dropTargetId === ROOT_DROP_TARGET ? "drop-target" : "",
             ].filter(Boolean).join(" ")}
               data-folder-drop-id={ROOT_DROP_TARGET}
+              onContextMenu={(event) => openFolderContextMenu(event, null)}
               onClick={() => selectFolder("")} aria-label="查看全部书签" title="把项目拖到这里可移回根目录">
               <Layers3 aria-hidden="true" size={16} /><span>全部书签</span><small>{visibleBookmarks.length}</small>
             </button>
@@ -769,17 +878,44 @@ export function BookmarksPage() {
               {(childrenByParent.get(null) ?? []).map((folder) => <FolderTreeNode key={folder.id} folder={folder}
                 childrenByParent={childrenByParent} counts={folderBookmarkCounts} expandedIds={expandedFolderIds}
                 selectedId={activeFolderId} draggedItem={draggedItem} dropTargetId={dropTargetId}
-                onToggle={toggleFolder} onSelect={selectFolder} onPointerDown={beginPointerDrag}
+                onToggle={toggleFolder} onSelect={selectFolder} onContextMenu={openFolderContextMenu}
+                onPointerDown={beginPointerDrag}
                 onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onPointerCancel={finishDrag} />)}
             </div>
           </aside>
           <section className="bookmark-folder-browser" aria-labelledby="bookmark-folder-browser-title">
             <header>
-              <div><p>当前位置</p><h2 id="bookmark-folder-browser-title">{activeFolderId ? folderPaths.get(activeFolderId) : "全部书签"}</h2></div>
+              <div className="bookmark-folder-location">
+                <p>当前位置</p>
+                <nav className="bookmark-folder-breadcrumb" aria-label="当前文件夹路径">
+                  <ol>
+                    <li>
+                      {activeFolderId ? (
+                        <button type="button" onClick={() => selectFolder("")} aria-label="打开全部书签">全部书签</button>
+                      ) : (
+                        <span id="bookmark-folder-browser-title" aria-current="page">全部书签</span>
+                      )}
+                    </li>
+                    {activeFolderTrail.map((folder, index) => {
+                      const isCurrent = index === activeFolderTrail.length - 1;
+                      return (
+                        <li key={folder.id}>
+                          <ChevronRight className="bookmark-folder-breadcrumb-separator" aria-hidden="true" size={13} />
+                          {isCurrent ? (
+                            <span id="bookmark-folder-browser-title" aria-current="page">{folder.name}</span>
+                          ) : (
+                            <button type="button" onClick={() => selectFolder(folder.id)} aria-label={`打开文件夹 ${folder.name}`}>{folder.name}</button>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </nav>
+              </div>
               <div className="bookmark-folder-browser-meta">
                 <span>{folderViewFolders.length} 个文件夹 · {folderViewBookmarks.length} 条链接</span>
                 {activeFolder && (
-                  <button type="button" className="folder-delete-button" onClick={requestFolderDeletion}
+                  <button type="button" className="folder-delete-button" onClick={() => requestFolderDeletion(activeFolder.id)}
                     aria-label={`删除文件夹 ${folderPaths.get(activeFolder.id) ?? activeFolder.name}`}>
                     <Trash2 aria-hidden="true" size={14} />删除文件夹
                   </button>
@@ -794,6 +930,7 @@ export function BookmarksPage() {
                   draggedItem?.kind === "folder" && draggedItem.id === folder.id ? "dragging" : "",
                 ].filter(Boolean).join(" ")}
                 data-folder-drop-id={folder.id}
+                onContextMenu={(event) => openFolderContextMenu(event, folder)}
                 onPointerDown={(event) => beginPointerDrag(event, { kind: "folder", id: folder.id })}
                 onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onPointerCancel={finishDrag}
                 onClick={() => {
@@ -823,6 +960,64 @@ export function BookmarksPage() {
             onClick={() => setVisibleCardCount((count) => count + BOOKMARK_CARD_BATCH_SIZE)}>
             继续显示 <small>还有 {remainingBookmarkCount} 条</small>
           </button>}
+        </div>
+      )}
+
+      {folderContextMenu && (
+        <div ref={folderContextMenuRef}
+          className={folderContextMenu.mode === "menu" ? "bookmark-context-menu" : "bookmark-context-menu edit-mode"}
+          style={{ left: folderContextMenu.x, top: folderContextMenu.y }}
+          role={folderContextMenu.mode === "menu" ? "menu" : "dialog"}
+          aria-label={folderContextMenu.mode === "menu"
+            ? `${folderContextMenu.folderName} 文件夹操作`
+            : folderContextMenu.mode === "rename"
+              ? `重命名文件夹 ${folderContextMenu.folderName}`
+              : `在 ${folderContextMenu.folderName} 中新建文件夹`}
+          onKeyDown={handleContextMenuKeyDown}>
+          {folderContextMenu.mode === "menu" ? (
+            <>
+              <button type="button" role="menuitem" autoFocus
+                onClick={() => setFolderContextMenu((current) => current ? { ...current, mode: "create" } : null)}>
+                <FolderPlus aria-hidden="true" size={15} />
+                <span>{folderContextMenu.folderId ? "新建子文件夹…" : "新建文件夹…"}</span>
+              </button>
+              {folderContextMenu.folderId && (
+                <>
+                  <button type="button" role="menuitem" onClick={() => {
+                    setFolderNameDraft(folderContextMenu.folderName);
+                    setFolderContextMenu((current) => current ? { ...current, mode: "rename" } : null);
+                  }}>
+                    <Pencil aria-hidden="true" size={15} /><span>重命名文件夹…</span>
+                  </button>
+                  <span className="bookmark-context-menu-separator" role="separator" />
+                  <button type="button" role="menuitem" className="danger" onClick={() => {
+                    requestFolderDeletion(folderContextMenu.folderId as string);
+                    closeFolderContextMenu();
+                  }}>
+                    <Trash2 aria-hidden="true" size={15} /><span>删除文件夹</span>
+                  </button>
+                </>
+              )}
+            </>
+          ) : (
+            <form onSubmit={(event) => void saveContextFolder(event)}>
+              <label htmlFor="bookmark-context-folder-name">
+                {folderContextMenu.mode === "rename"
+                  ? `重命名“${folderContextMenu.folderName}”`
+                  : folderContextMenu.folderId ? `在“${folderContextMenu.folderName}”中新建` : "新建根文件夹"}
+              </label>
+              <input id="bookmark-context-folder-name" autoFocus value={folderNameDraft}
+                onChange={(event) => { setFolderNameDraft(event.target.value); setContextMenuError(""); }}
+                placeholder="文件夹名称" aria-invalid={Boolean(contextMenuError)} />
+              {contextMenuError && <p role="alert">{contextMenuError}</p>}
+              <div>
+                <button type="button" onClick={closeFolderContextMenu}>取消</button>
+                <button type="submit" className="primary" disabled={savingFolder || !folderNameDraft.trim()}>
+                  {savingFolder ? "正在保存…" : folderContextMenu.mode === "rename" ? "保存名称" : "创建文件夹"}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       )}
 
@@ -918,7 +1113,9 @@ export function BookmarksPage() {
                 <input type="checkbox" checked={enrichAfterImport} onChange={(event) => setEnrichAfterImport(event.target.checked)} />
                 <span>
                   <strong>导入后补全卡片资料</strong>
-                  <small>保留 HTML 中的标题；后台抓取网站图标，并用设置中的 AI 服务生成缺失简介。</small>
+                  <small>{importPreview.bookmarks.length > AUTO_ENRICH_IMPORT_LIMIT
+                    ? `本次有 ${importPreview.bookmarks.length} 条书签，为避免大量联网与 AI 请求已默认关闭；需要时仍可手动开启。`
+                    : "保留 HTML 中的标题；后台抓取网站图标，并用设置中的 AI 服务生成缺失简介。"}</small>
                 </span>
               </label>
               <p className="import-security-note">只读取 HTML 中的链接与文件夹，不执行脚本，也不加载远程资源。</p>

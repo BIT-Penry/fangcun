@@ -8,10 +8,6 @@ export async function openExternalUrl(value: string, browser: BrowserPreference 
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("只允许在浏览器中打开 http 或 https 地址");
   }
-  if (browser === "system") {
-    await openUrl(url.toString());
-    return;
-  }
   try {
     await invoke("open_url_with_browser", { url: url.toString(), browser });
   } catch {

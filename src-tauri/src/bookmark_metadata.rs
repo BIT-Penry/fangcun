@@ -50,7 +50,11 @@ pub async fn fetch_ai_bookmark_metadata(url: String) -> Result<BookmarkMetadata,
         }),
         Err(error) if error.contains("配置") || error.contains("API Key") => Err(error),
         Err(error) => Ok(BookmarkMetadata {
-            warning: Some(format!("{error}，已改用网页原始信息")),
+            warning: Some(if error.contains("JSON 格式") {
+                "AI 整理未完成，已保留网页原始信息，可直接修改或重试".to_string()
+            } else {
+                format!("{error}，已改用网页原始信息")
+            }),
             ..page.metadata
         }),
     }
@@ -101,7 +105,7 @@ async fn fetch_page(url: &str) -> Result<FetchedPage, String> {
 
     let final_url = validate_remote_url(response.url().as_str())?;
     if !response.status().is_success() {
-        return Err(format!("网页返回了状态码 {}", response.status().as_u16()));
+        return Err(http_status_error(response.status().as_u16(), &final_url));
     }
     if let Some(content_type) = response.headers().get(CONTENT_TYPE) {
         let content_type = content_type
@@ -138,6 +142,22 @@ async fn fetch_page(url: &str) -> Result<FetchedPage, String> {
         metadata: parse_metadata(&html, &final_url),
         visible_text: visible_text(&html),
     })
+}
+
+fn http_status_error(status: u16, url: &Url) -> String {
+    let host = url.host_str().unwrap_or_default().to_ascii_lowercase();
+    let site_name = if host == "zhihu.com" || host.ends_with(".zhihu.com") {
+        "知乎"
+    } else {
+        "这个网站"
+    };
+    match status {
+        401 | 403 => format!(
+            "{site_name}限制了第三方自动读取（{status}），不是 AI 配置故障；仍可手动填写标题和简介后保存"
+        ),
+        429 => format!("{site_name}暂时限制了频繁访问（429），请稍后重试或手动填写"),
+        _ => format!("网页暂时无法读取（状态码 {status}），仍可手动填写后保存"),
+    }
 }
 
 fn validate_remote_url(input: &str) -> Result<Url, String> {
@@ -365,5 +385,20 @@ mod tests {
         assert!(validate_remote_url("http://127.0.0.1").is_err());
         assert!(validate_remote_url("http://192.168.1.2").is_err());
         assert!(validate_remote_url("https://example.com").is_ok());
+    }
+
+    #[test]
+    fn explains_blocked_sites_without_blaming_ai_configuration() {
+        let zhihu = Url::parse("https://zhuanlan.zhihu.com/p/525106459").unwrap();
+        assert_eq!(
+            http_status_error(403, &zhihu),
+            "知乎限制了第三方自动读取（403），不是 AI 配置故障；仍可手动填写标题和简介后保存"
+        );
+
+        let generic = Url::parse("https://example.com/private").unwrap();
+        assert_eq!(
+            http_status_error(401, &generic),
+            "这个网站限制了第三方自动读取（401），不是 AI 配置故障；仍可手动填写标题和简介后保存"
+        );
     }
 }

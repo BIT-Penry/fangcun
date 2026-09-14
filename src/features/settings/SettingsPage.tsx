@@ -31,7 +31,7 @@ const AI_PROVIDER_OPTIONS: readonly {
   model: string;
 }[] = [
   { value: "deepseek", label: "DeepSeek", description: "中文整理，性价比较高", baseUrl: "https://api.deepseek.com", model: "deepseek-v4-flash" },
-  { value: "kimi", label: "Kimi", description: "长文本与中文内容", baseUrl: "https://api.moonshot.cn/v1", model: "kimi-k3" },
+  { value: "kimi", label: "Kimi", description: "多模态与中文内容", baseUrl: "https://api.moonshot.cn/v1", model: "kimi-k3" },
   { value: "openai", label: "OpenAI / GPT", description: "通用理解与稳定输出", baseUrl: "https://api.openai.com/v1", model: "gpt-5.6" },
   { value: "custom", label: "自定义", description: "OpenAI 兼容接口", baseUrl: "", model: "" },
 ];
@@ -102,7 +102,7 @@ export function SettingsPage() {
   };
 
   const removeAiService = async () => {
-    if (!window.confirm("删除已保存的 AI 服务和 API Key？之后将无法使用 AI 获取网页信息。")) return;
+    if (!window.confirm("删除已保存的 AI 服务和 API Key？之后将无法使用智能整理和公式识别。")) return;
     setAiStatus("saving");
     setAiMessage("正在删除 AI 配置…");
     try {
@@ -212,12 +212,12 @@ export function SettingsPage() {
         <section className="settings-section">
           <header className="settings-section-heading">
             <span className="settings-section-icon"><Sparkles aria-hidden="true" size={17} /></span>
-            <div><h2>智能服务</h2><p>为书签生成简介和内容摘要。</p></div>
+            <div><h2>智能服务</h2><p>用于内容整理、技能分类与公式识别。</p></div>
           </header>
           <div className="settings-panel ai-service-card">
             <div className="settings-block">
               <header>
-                <div><h3>网页整理服务</h3><p>选择服务商，再填写模型与 API Key。</p></div>
+                <div><h3>AI 模型</h3><p>选择服务商，再填写模型与 API Key。</p></div>
                 <span className={savedAiConfig?.configured ? "ai-service-badge configured" : "ai-service-badge"}>
                   <Sparkles aria-hidden="true" size={12} />{savedAiConfig?.configured ? `已启用 ${savedAiConfig.displayName}` : "未配置"}
                 </span>
@@ -250,7 +250,7 @@ export function SettingsPage() {
                 {savedAiConfig?.configured && <button type="button" className="icon-button danger" aria-label="删除 AI 服务配置"
                   disabled={aiStatus === "saving"} onClick={() => void removeAiService()}><Trash2 aria-hidden="true" size={15} /></button>}
               </div>
-              <p className="settings-note">内置服务使用官方接口，自定义项支持 OpenAI 兼容 API。仅在获取网页信息时发送经过截断的网页文本，API Key 只保存在系统钥匙串。</p>
+              <p className="settings-note">内置服务使用官方接口，自定义项支持 OpenAI 兼容 API。文本仅在你触发智能整理时发送；公式截图仅在点击识别后发送给 Kimi。API Key 只保存在系统钥匙串。</p>
             </div>
           </div>
         </section>

@@ -3,6 +3,7 @@ mod bookmark_metadata;
 mod database;
 mod external_browser;
 mod github_skill;
+mod speed_test;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -22,8 +23,12 @@ pub fn run() {
             ai_service::format_skill_content,
             ai_service::generate_skill_description,
             ai_service::generate_skill_tags,
+            ai_service::recognize_formula,
             github_skill::fetch_github_skill,
-            external_browser::open_url_with_browser
+            external_browser::open_url_with_browser,
+            speed_test::measure_network_latency,
+            speed_test::measure_download_speed,
+            speed_test::measure_upload_speed
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fangcun");

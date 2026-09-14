@@ -98,7 +98,11 @@ describe("BookmarkEditor metadata", () => {
     ]} />);
 
     await user.type(screen.getByLabelText("网页地址"), "https://example.com");
-    await user.selectOptions(screen.getByRole("combobox", { name: "选择已有文件夹" }), "研究 / 论文");
+    await user.click(screen.getByRole("button", { name: "选择已有文件夹" }));
+    expect(screen.queryByText("论文")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "进入文件夹 研究" }));
+    await user.click(screen.getByRole("button", { name: "进入文件夹 论文" }));
+    await user.click(screen.getByRole("button", { name: "选择文件夹 研究 / 论文" }));
     await user.click(screen.getByLabelText("搜索或新建书签标签"));
     await user.click(screen.getByRole("checkbox", { name: "研究" }));
     expect(screen.getByRole("checkbox", { name: "研究" })).toBeChecked();

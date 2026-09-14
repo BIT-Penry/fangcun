@@ -55,6 +55,8 @@ export interface BookmarksStore {
   listBookmarks(): Promise<Bookmark[]>;
   listFolders(): Promise<BookmarkFolder[]>;
   createBookmark(input: BookmarkInput): Promise<void>;
+  createFolder(name: string, parentId: string | null): Promise<string>;
+  renameFolder(id: string, name: string): Promise<void>;
   updateBookmark(id: string, input: BookmarkInput): Promise<void>;
   updateBookmarkMetadata(id: string, description: string | null, faviconUrl: string | null): Promise<void>;
   deleteBookmark(id: string): Promise<void>;

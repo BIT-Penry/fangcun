@@ -17,6 +17,8 @@ const bookmarks: BookmarksStore = {
   listBookmarks: async () => [],
   listFolders: async () => [],
   createBookmark: async () => undefined,
+  createFolder: async () => "folder-new",
+  renameFolder: async () => undefined,
   updateBookmark: async () => undefined,
   updateBookmarkMetadata: async () => undefined,
   deleteBookmark: async () => undefined,
@@ -86,6 +88,7 @@ describe("AppShell", () => {
     expect(within(navigation).getByRole("link", { name: "书签" })).toBeInTheDocument();
     expect(within(navigation).getByRole("link", { name: "提示词" })).toBeInTheDocument();
     expect(within(navigation).getByRole("link", { name: "技能库" })).toBeInTheDocument();
+    expect(within(navigation).getByRole("link", { name: "工具箱" })).toBeInTheDocument();
     expect(within(navigation).getByRole("link", { name: "日记" })).toBeInTheDocument();
     expect(within(navigation).getByRole("link", { name: "设置" })).toBeInTheDocument();
 
